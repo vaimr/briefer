@@ -17,4 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY worker.py .
 
+# Предзагрузка модели Whisper
+RUN python -c "from faster_whisper import WhisperModel; WhisperModel('large-v3', device='cpu', compute_type='int8')"
+
 CMD ["python", "worker.py"]
