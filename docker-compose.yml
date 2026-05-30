@@ -1,0 +1,52 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis_data:/data
+
+  bot:
+    build: ./bot
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - MATRIX_HOMESERVER=${MATRIX_HOMESERVER}
+      - MATRIX_USER=${MATRIX_USER}
+      - MATRIX_PASSWORD=${MATRIX_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./data:/data
+
+  worker:
+    build: ./worker
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LLM_API_URL=http://faex:8080/v1
+      - LLM_MODEL_NAME=qwen2.5-7b-instruct
+      - WHISPER_MODEL=large-v3
+      - DATA_DIR=/data
+      - TZ=Europe/Moscow
+    volumes:
+      - ./data:/data
+      - whisper_cache:/root/.cache/huggingface
+    extra_hosts:
+      - "faex:host-gateway"
+
+volumes:
+  redis_data:
+  whisper_cache:
