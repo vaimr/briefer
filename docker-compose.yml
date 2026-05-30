@@ -37,7 +37,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - LLM_API_URL=http://faex:8080/v1
-      - LLM_MODEL_NAME=qwen2.5-7b-instruct
+      - LLM_MODEL_NAME=qwen3.6-a3b-mtp:35b
       - WHISPER_MODEL=large-v3
       - DATA_DIR=/data
       - TZ=Europe/Moscow
