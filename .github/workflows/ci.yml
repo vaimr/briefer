@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install ruff mypy
+          pip install -r bot/requirements.txt
+      - name: Run ruff
+        run: ruff check bot worker tests
+      - name: Run mypy
+        run: mypy bot worker tests --ignore-missing-imports
+
+  test:
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install pytest pytest-cov
+          pip install -r bot/requirements.txt
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build bot Docker image
+        run: docker build -t briefer-bot -f bot/Dockerfile bot/
+      - name: Build worker Docker image
+        run: docker build -t briefer-worker -f worker/Dockerfile worker/

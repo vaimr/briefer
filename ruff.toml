@@ -1,0 +1,10 @@
+[lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[format]
+quote-style = "double"
+line-ending = "lf"
+
+[lint.isort]
+known-first-party = ["bot", "worker"]

@@ -1,2 +1,5 @@
 matrix-nio>=0.24.0
 redis
+aiohttp
+prometheus-client
+pydantic-settings

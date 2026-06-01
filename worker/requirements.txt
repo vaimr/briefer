@@ -2,3 +2,5 @@ faster-whisper>=1.0.0
 redis
 requests
 weasyprint
+prometheus-client
+pydantic-settings

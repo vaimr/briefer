@@ -1,0 +1,1 @@
+"""Briefer worker package."""

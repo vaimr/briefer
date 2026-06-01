@@ -1,8 +1,8 @@
 .env
-data/
+data/*.pdf
+data/*.md
 __pycache__/
 *.pyc
 *.log
-*.pdf
-*.md
-*.wav
+.env.local
+.omo/
