@@ -1,9 +1,12 @@
 """Главный entry point воркера."""
 
 import asyncio
+import hashlib
+import json
 import os
 from contextlib import contextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, Tuple
 
 from redis import ConnectionError as RedisConnectionError
@@ -17,6 +20,8 @@ from .pdf_generator import generate_pdf
 from .whisper_engine import WhisperEngine
 
 QUEUE_NAME = "transcription_queue"
+CLEANUP_CHANNEL = "task_cleanup"
+RESULTS_DIR = Path("/tmp/results")
 
 settings = WorkerConfig()
 
@@ -48,6 +53,12 @@ def process_task_sync(task_str: str, whisper: WhisperEngine, llm: LLMAPI, redis_
     print(f"  Summarized: {len(summary)} chars")
     print(f"  Risks: {risks.get('risk_level', 'unknown')}")
 
+    # Генерируем уникальный task_id из audio_path
+    task_id = hashlib.sha256(audio_path.encode()).hexdigest()[:16]
+    task_dir = RESULTS_DIR / task_id
+    task_dir.mkdir(parents=True, exist_ok=True)
+
+    # Markdown файлы
     transcript_md = (
         f"# Полная транскрипция\n\n"
         f"**Дата:** {get_date()}\n"
@@ -56,8 +67,15 @@ def process_task_sync(task_str: str, whisper: WhisperEngine, llm: LLMAPI, redis_
     )
     summary_md = f"# Саммари встречи\n\n{summary}"
 
-    transcript_pdf = generate_pdf(transcript_md, f"{base_name}_transcript")
-    summary_pdf = generate_pdf(summary_md, f"{base_name}_summary")
+    transcript_md_path = task_dir / "transcript.md"
+    summary_md_path = task_dir / "summary.md"
+    transcript_md_path.write_text(transcript_md, encoding="utf-8")
+    summary_md_path.write_text(summary_md, encoding="utf-8")
+    print(f"  Markdown files: {transcript_md_path}, {summary_md_path}")
+
+    # PDF файлы
+    transcript_pdf = generate_pdf(transcript_md, f"{task_dir}/transcript")
+    summary_pdf = generate_pdf(summary_md, f"{task_dir}/summary")
 
     risk_files = []
     if risks.get("is_risky", False):
@@ -74,13 +92,23 @@ def process_task_sync(task_str: str, whisper: WhisperEngine, llm: LLMAPI, redis_
             risk_md += f"**Quote:** {detail.get('quote', '')}\n\n"
             risk_md += f"**Description:** {detail.get('description', '')}\n\n"
         risk_md += f"\n**Summary:** {risks.get('summary', '')}\n"
-        risk_pdf = generate_pdf(risk_md, f"{base_name}_risk_alert")
-        risk_files.append(risk_pdf)
+        risk_pdf = generate_pdf(risk_md, f"{task_dir}/risk_alert")
+        risk_files.append(str(risk_pdf))
         print(f"  Risk alert generated: {risk_pdf}")
 
-    all_files = [transcript_pdf, summary_pdf] + risk_files
-    redis_conn.publish("task_results", f"{room_id}|{'|'.join(all_files)}")
-    print(f"  Results published: {len(all_files)} files")
+    all_files = [str(transcript_pdf), str(summary_pdf)] + risk_files
+    message = {
+        "task_id": task_id,
+        "room_id": room_id,
+        "transcript_md": str(transcript_md_path),
+        "transcript_pdf": str(transcript_pdf),
+        "summary_md": str(summary_md_path),
+        "summary_pdf": str(summary_pdf),
+        "risk_files": risk_files,
+        "timestamp": datetime.now().isoformat(),
+    }
+    redis_conn.publish("task_results", json.dumps(message))
+    print(f"  Results published: {len(all_files)} files to {task_dir}")
 
 
 async def _async_summarize_and_risks(llm: LLMAPI, transcript: str) -> tuple:
@@ -132,6 +160,55 @@ def dequeue_task(redis_conn: Redis) -> Optional[Tuple[str, str]]:
     return room_id, audio_path
 
 
+def cleanup_listener(redis_host: str, redis_port: int) -> None:
+    import json
+    import signal
+    import threading
+
+    _running = True
+
+    def _handle_signal(signum, frame):
+        nonlocal _running
+        _running = False
+
+    try:
+        signal.signal(signal.SIGTERM, _handle_signal)
+        signal.signal(signal.SIGINT, _handle_signal)
+    except ValueError:
+        pass
+
+    import redis
+
+    r = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
+    pubsub = r.pubsub()
+    pubsub.subscribe(CLEANUP_CHANNEL)
+
+    print(f"Cleanup listener started on channel {CLEANUP_CHANNEL}")
+
+    try:
+        while _running:
+            message = pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+            if message and message["type"] == "message":
+                try:
+                    data = json.loads(message["data"])
+                    task_id = data.get("task_id")
+                    if task_id:
+                        task_dir = RESULTS_DIR / task_id
+                        if task_dir.exists():
+                            import shutil
+                            shutil.rmtree(task_dir)
+                            print(f"Cleaned up: {task_dir}")
+                        else:
+                            print(f"Cleanup target not found: {task_dir}")
+                except json.JSONDecodeError as exc:
+                    print(f"Cleanup JSON parse error: {exc}")
+                except Exception as exc:
+                    print(f"Cleanup error: {exc}")
+    finally:
+        pubsub.unsubscribe(CLEANUP_CHANNEL)
+        pubsub.close()
+
+
 def main():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -160,6 +237,13 @@ def main():
         )
 
     redis_conn = get_redis()
+
+    cleanup_thread = threading.Thread(
+        target=cleanup_listener,
+        args=(settings.REDIS_HOST, settings.REDIS_PORT),
+        daemon=True,
+    )
+    cleanup_thread.start()
 
     while True:
         try:

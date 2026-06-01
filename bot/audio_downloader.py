@@ -329,6 +329,8 @@ def _get_event_message_id(event) -> str | None:
         Safe 16-char hex string or None.
     """
     raw = event.source.get("event_id") if hasattr(event, "source") else None
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8")
     return hashlib.sha256(raw.encode()).hexdigest()[:16] if raw else None
 
 

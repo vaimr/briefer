@@ -21,6 +21,10 @@ class WorkerConfig(BaseSettings):
     HEALTH_PORT: int = 8082
     MAX_TASK_DURATION: int = 900
     MAX_RETRIES: int = 3
+    MATRIX_HOMESERVER: str = ""
+    MATRIX_USER: str = ""
+    MATRIX_ACCESS_TOKEN: str = ""
+    MATRIX_ROOM_ID: str = ""
 
     model_config = SettingsConfigDict(
         env_file=None,

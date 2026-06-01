@@ -20,6 +20,7 @@ class ResultListener:
     """
 
     CHANNEL = "task_results"
+    CLEANUP_CHANNEL = "task_cleanup"
 
     def __init__(self, redis_host: str, redis_port: int) -> None:
         """Create a listener (does not connect yet).
@@ -91,3 +92,16 @@ class ResultListener:
         finally:
             pubsub.unsubscribe(self.CHANNEL)
             pubsub.close()
+
+    @staticmethod
+    def publish_cleanup(redis_host: str, redis_port: int, task_id: str) -> None:
+        """Publish a cleanup request for a completed task.
+
+        Args:
+            redis_host: Redis server hostname.
+            redis_port: Redis server port.
+            task_id: Task ID to clean up.
+        """
+        r = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
+        r.publish(ResultListener.CLEANUP_CHANNEL, json.dumps({"task_id": task_id}))
+        logger.info("Published cleanup for task %s", task_id)

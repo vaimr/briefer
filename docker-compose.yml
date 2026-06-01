@@ -23,12 +23,13 @@ services:
       - MATRIX_USER=${MATRIX_USER}
       - MATRIX_PASSWORD=${MATRIX_PASSWORD}
       - MATRIX_ACCESS_TOKEN=${MATRIX_ACCESS_TOKEN:-}
-      - MATRIX_REDIS_HOST=redis
-      - MATRIX_REDIS_PORT=6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - MATRIX_HEALTH_PORT=8000
     volumes:
       - ./data:/data
       - ./bot/help.txt:/etc/briefer/help.txt:ro
+      - results:/tmp/results:ro
 
   worker:
     build:
@@ -49,6 +50,7 @@ services:
       - TZ=Europe/Moscow
     volumes:
       - ./data:/data
+      - results:/tmp/results
       - whisper_cache:/root/.cache/huggingface
     extra_hosts:
       - "faex:192.168.0.104"
@@ -56,3 +58,4 @@ services:
 volumes:
   redis_data:
   whisper_cache:
+  results:

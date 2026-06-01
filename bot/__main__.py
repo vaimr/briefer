@@ -58,37 +58,67 @@ async def result_listener(client, pubsub) -> None:
 async def _deliver_result(client, pubsub, data) -> None:
     """Deliver transcription result to the Matrix room."""
     room_id = data.get("room_id")
-    transcript_path = data.get("transcript_path")
-    summary_path = data.get("summary_path")
+    task_id = data.get("task_id")
+    transcript_md = data.get("transcript_md")
+    transcript_pdf = data.get("transcript_pdf")
+    summary_md = data.get("summary_md")
+    summary_pdf = data.get("summary_pdf")
+    risk_files = data.get("risk_files", [])
 
-    if not all([room_id, transcript_path, summary_path]):
+    if not all([room_id, task_id, transcript_md, transcript_pdf, summary_md, summary_pdf]):
         logger.error("Invalid result data: %s", data)
         return
 
     try:
         import os
 
-        for path, name in [(transcript_path, "transcript"), (summary_path, "summary")]:
+        files_to_send = [
+            (transcript_md, "transcript.md", "text/markdown"),
+            (transcript_pdf, "transcript.pdf", "application/pdf"),
+            (summary_md, "summary.md", "text/markdown"),
+            (summary_pdf, "summary.pdf", "application/pdf"),
+        ]
+        for path, name, mime in files_to_send:
             if not os.path.exists(path):
-                raise FileNotFoundError(f"{name} PDF not found: {path}")
+                raise FileNotFoundError(f"{name} not found: {path}")
             if os.path.getsize(path) == 0:
-                raise ValueError(f"{name} PDF is empty: {path}")
+                raise ValueError(f"{name} is empty: {path}")
 
-        for path, name in [(transcript_path, "transcript"), (summary_path, "summary")]:
+        for path, name, mime in files_to_send:
             with open(path, "rb") as f:
-                resp = await client.upload(f, content_type="application/pdf")
+                resp = await client.upload(f, content_type=mime, filename=name)
 
             await client.room_send(
                 room_id,
                 "m.room.message",
                 {
                     "msgtype": "m.file",
-                    "body": f"{name}.pdf",
+                    "body": name,
+                    "url": resp.content_uri,
+                    "info": {
+                        "mimetype": mime,
+                    },
+                },
+            )
+            logger.info("Sent %s to %s: %s", name, room_id, resp.content_uri)
+
+        for risk_path in risk_files:
+            if not os.path.exists(risk_path):
+                logger.warning("Risk file not found: %s", risk_path)
+                continue
+            with open(risk_path, "rb") as f:
+                resp = await client.upload(f, content_type="application/pdf")
+            await client.room_send(
+                room_id,
+                "m.room.message",
+                {
+                    "msgtype": "m.file",
+                    "body": "risk_alert.pdf",
                     "url": resp.content_uri,
                     "info": {"mimetype": "application/pdf"},
                 },
             )
-            logger.info("Sent %s.pdf to %s: %s", name, room_id, resp.content_uri)
+            logger.info("Sent risk_alert.pdf to %s: %s", room_id, resp.content_uri)
 
         await client.room_send(
             room_id,
@@ -96,6 +126,8 @@ async def _deliver_result(client, pubsub, data) -> None:
             {"msgtype": "m.notice", "body": "Результаты готовы!"},
         )
         logger.info("Results delivered to %s", room_id)
+
+        ResultListener.publish_cleanup(settings.REDIS_HOST, settings.REDIS_PORT, task_id)
     except Exception as exc:
         logger.error("Failed to deliver results to %s: %s", room_id, exc)
         try:
