@@ -4,6 +4,8 @@ import json
 import logging
 import signal
 
+import redis
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,6 +22,7 @@ class ResultListener:
     """
 
     CHANNEL = "task_results"
+    ERROR_CHANNEL = "task_errors"
     CLEANUP_CHANNEL = "task_cleanup"
 
     def __init__(self, redis_host: str, redis_port: int) -> None:
@@ -46,8 +49,6 @@ class ResultListener:
         Raises:
             ConnectionError: If the Redis server is unreachable.
         """
-        import redis
-
         self._running = True
 
         def _handle_signal(signum: int, frame) -> None:
@@ -105,3 +106,59 @@ class ResultListener:
         r = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
         r.publish(ResultListener.CLEANUP_CHANNEL, json.dumps({"task_id": task_id}))
         logger.info("Published cleanup for task %s", task_id)
+
+    @staticmethod
+    def listen_for_errors(client, redis_host: str, redis_port: int) -> None:
+        """Listen to task_errors channel and notify user on failure.
+
+        Runs in a background thread. Blocks until _running is False.
+        """
+        import signal
+        import threading
+
+        _running = True
+
+        def _handle_signal(signum, frame):
+            nonlocal _running
+            _running = False
+
+        try:
+            signal.signal(signal.SIGTERM, _handle_signal)
+            signal.signal(signal.SIGINT, _handle_signal)
+        except ValueError:
+            pass
+
+        r = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
+        pubsub = r.pubsub()
+        pubsub.subscribe(ResultListener.ERROR_CHANNEL)
+
+        logger.info("Error listener started on channel %s", ResultListener.ERROR_CHANNEL)
+
+        try:
+            while _running:
+                message = pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                if message and message["type"] == "message":
+                    try:
+                        data = json.loads(message["data"])
+                        room_id = data.get("room_id")
+                        error = data.get("error", "Unknown error")
+                        if room_id and client:
+                            import asyncio
+                            asyncio.run(
+                                client.room_send(
+                                    room_id,
+                                    "m.room.message",
+                                    {
+                                        "msgtype": "m.notice",
+                                        "body": f"Ошибка обработки: {error}",
+                                    },
+                                )
+                            )
+                            logger.info("Error notification sent to %s: %s", room_id, error)
+                    except json.JSONDecodeError as exc:
+                        logger.error("Error channel JSON parse error: %s", exc)
+                    except Exception as exc:
+                        logger.error("Error channel callback error: %s", exc)
+        finally:
+            pubsub.unsubscribe(ResultListener.ERROR_CHANNEL)
+            pubsub.close()

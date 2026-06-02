@@ -60,7 +60,7 @@ class TestGetAudioEventType:
         from nio import RoomMessageFile
 
         event = MagicMock(spec=RoomMessageFile)
-        event.mime_type = "audio/ogg"
+        event.source = {"content": {"info": {"mimetype": "audio/ogg"}}}
         assert get_audio_event_type(event) is True
 
     def test_non_audio_mime_file_returns_false(self):
@@ -68,7 +68,7 @@ class TestGetAudioEventType:
         from nio import RoomMessageFile
 
         event = MagicMock(spec=RoomMessageFile)
-        event.mime_type = "image/png"
+        event.source = {"content": {"info": {"mimetype": "image/png"}}}
         assert get_audio_event_type(event) is False
 
 

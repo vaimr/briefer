@@ -58,8 +58,8 @@ def _start_health_server(handler_class, config, port):
     server = http.server.HTTPServer(("127.0.0.1", port), handler_class)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    # Give the server a moment to bind
-    time.sleep(0.2)
+    # Give the server a moment to bind and be ready
+    time.sleep(0.5)
     return server
 
 
@@ -202,6 +202,7 @@ class TestWorkerHealthEndpoint:
 
     def test_health_returns_200_when_all_checks_pass(self, worker_config):
         """GET /health → 200 when all checks healthy."""
+        # Mock underlying dependencies BEFORE starting server to avoid race condition
         with patch("worker.health.check_redis", return_value="healthy"), \
              patch("worker.health.check_llm", return_value="healthy"), \
              patch("worker.health.check_whisper", return_value="healthy"):

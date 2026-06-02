@@ -91,7 +91,7 @@ class AudioDownloader:
         if not url:
             raise ValueError("Event has no download URL")
         if not message_id:
-            raise ValueError("Event has no message_id")
+            raise ValueError("Event has no event_id")
 
         ext = _extract_extension(event, url)
         file_path = self.data_dir / f"{message_id}{ext}"

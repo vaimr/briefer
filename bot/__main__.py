@@ -6,6 +6,8 @@ import json
 import logging
 import signal
 import sys
+from io import BytesIO
+from pathlib import Path
 from typing import Optional
 
 import redis
@@ -84,9 +86,14 @@ async def _deliver_result(client, pubsub, data) -> None:
             if os.path.getsize(path) == 0:
                 raise ValueError(f"{name} is empty: {path}")
 
+        file_data_map = {}
         for path, name, mime in files_to_send:
-            with open(path, "rb") as f:
-                resp = await client.upload(f, content_type=mime, filename=name)
+            file_data_map[path] = Path(path).read_bytes()
+
+        for path, name, mime in files_to_send:
+            file_data = file_data_map[path]
+            resp, _ = await client.upload(BytesIO(file_data), content_type=mime, filename=name)
+            mxc_uri = resp.content_uri
 
             await client.room_send(
                 room_id,
@@ -94,31 +101,32 @@ async def _deliver_result(client, pubsub, data) -> None:
                 {
                     "msgtype": "m.file",
                     "body": name,
-                    "url": resp.content_uri,
+                    "url": mxc_uri,
                     "info": {
                         "mimetype": mime,
                     },
                 },
             )
-            logger.info("Sent %s to %s: %s", name, room_id, resp.content_uri)
+            logger.info("Sent %s to %s: %s", name, room_id, mxc_uri)
 
         for risk_path in risk_files:
             if not os.path.exists(risk_path):
                 logger.warning("Risk file not found: %s", risk_path)
                 continue
-            with open(risk_path, "rb") as f:
-                resp = await client.upload(f, content_type="application/pdf")
+            risk_data = Path(risk_path).read_bytes()
+            resp, _ = await client.upload(BytesIO(risk_data), content_type="application/pdf", filename="risk_alert.pdf")
+            mxc_uri = resp.content_uri
             await client.room_send(
                 room_id,
                 "m.room.message",
                 {
                     "msgtype": "m.file",
                     "body": "risk_alert.pdf",
-                    "url": resp.content_uri,
+                    "url": mxc_uri,
                     "info": {"mimetype": "application/pdf"},
                 },
             )
-            logger.info("Sent risk_alert.pdf to %s: %s", room_id, resp.content_uri)
+            logger.info("Sent risk_alert.pdf to %s: %s", room_id, mxc_uri)
 
         await client.room_send(
             room_id,
@@ -209,37 +217,44 @@ async def main():
     logger.info("Help text loaded: %d chars", len(help_text))
 
     # Подписка на аудио сообщения
+    bot_user_id = client.user_id
     async def callback(room, event):
-        room_id = room.room_id
-        message_id = event.source.get("event_id", "unknown")
-        logger.info("Received event: room=%s, type=%s, message_id=%s", room_id, type(event).__name__, message_id)
+        try:
+            if event.sender == bot_user_id:
+                return
 
-        if get_audio_event_type(event):
-            logger.info(
-                "Processing audio message: room_id=%s, message_id=%s",
-                room_id,
-                message_id,
-            )
-            try:
-                await handle_audio_message(
-                    client, room_id, event, "/data/input",
-                    lambda task: redis_client.rpush("transcription_queue", task),
+            room_id = room.room_id
+            message_id = event.source.get("event_id", "unknown")
+            logger.info("Received event: room=%s, type=%s, message_id=%s", room_id, type(event).__name__, message_id)
+
+            if get_audio_event_type(event):
+                logger.info(
+                    "Processing audio message: room_id=%s, message_id=%s",
+                    room_id,
+                    message_id,
                 )
-                logger.info("Audio validated: %s", room_id)
-                logger.info("Pushed to queue: %s", room_id)
-            except Exception as exc:
-                logger.error("Error processing message: %s", exc)
                 try:
-                    await client.room_send(
-                        room_id,
-                        "m.room.message",
-                        {"msgtype": "m.notice", "body": f"Ошибка: {exc}"},
+                    await handle_audio_message(
+                        client, room_id, event, "/data/input",
+                        lambda task: redis_client.rpush("transcription_queue", task),
                     )
-                except Exception:
-                    logger.exception("Failed to send error notification")
-        else:
-            logger.info("Non-audio message received: room_id=%s", room_id)
-            await handle_non_audio_message(client, room_id, help_text)
+                    logger.info("Audio validated: %s", room_id)
+                    logger.info("Pushed to queue: %s", room_id)
+                except Exception as exc:
+                    logger.error("Error processing message: %s", exc)
+                    try:
+                        await client.room_send(
+                            room_id,
+                            "m.room.message",
+                            {"msgtype": "m.notice", "body": f"Ошибка: {exc}"},
+                        )
+                    except Exception:
+                        logger.exception("Failed to send error notification")
+            else:
+                logger.info("Non-audio message received: room_id=%s", room_id)
+                await handle_non_audio_message(client, room_id, help_text)
+        except Exception:
+            logger.exception("Unhandled callback error")
 
     client.add_event_callback(callback, (RoomMessageAudio, RoomMessageFile, RoomMessageText))
     logger.info("Event callback registered: RoomMessageAudio, RoomMessageFile, RoomMessageText")
@@ -249,6 +264,16 @@ async def main():
     pubsub.subscribe("task_results")
     global result_listener_task
     result_listener_task = asyncio.create_task(result_listener(client, pubsub))
+
+    # Подписка на ошибки (отдельный поток)
+    import threading
+    error_thread = threading.Thread(
+        target=ResultListener.listen_for_errors,
+        args=(client, settings.REDIS_HOST, settings.REDIS_PORT),
+        daemon=True,
+    )
+    error_thread.start()
+    logger.info("Error listener thread started")
 
     # Health + metrics
     start_http_server(settings)

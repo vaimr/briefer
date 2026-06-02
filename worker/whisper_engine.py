@@ -1,5 +1,6 @@
 """Whisper transcription engine."""
 
+import os
 import subprocess
 from faster_whisper import WhisperModel
 
@@ -20,10 +21,12 @@ class WhisperEngine:
             (transcript, duration_seconds)
         """
         wav_path = audio_path.rsplit(".", 1)[0] + ".wav"
+        tmp_path = wav_path + ".tmp"
         subprocess.run(
-            ["ffmpeg", "-i", audio_path, "-ar", "16000", "-ac", "1", "-y", wav_path],
+            ["ffmpeg", "-i", audio_path, "-ar", "16000", "-ac", "1", "-y", tmp_path],
             check=True, capture_output=True,
         )
+        os.replace(tmp_path, wav_path)
 
         segments, info = self.model.transcribe(
             wav_path, beam_size=5, vad_filter=True, language=None,

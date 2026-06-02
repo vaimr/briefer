@@ -1,7 +1,10 @@
 """LLM engine for summarization and risk detection."""
 
 import json
+import logging
 import requests
+
+logger = logging.getLogger(__name__)
 
 
 SUMMARIZE_PROMPT = (
@@ -78,7 +81,11 @@ class LLMAPI:
     def check_risks(self, transcript: str) -> dict:
         """Выявление опасных обсуждений. Возвращает JSON-объект."""
         content = self.chat(RISK_PROMPT, transcript, temperature=0.0, max_tokens=1000)
-        # Извлекаем JSON из ответа (модель может обернуть в markdown code block)
         if "```" in content:
             content = content.split("```")[1].lstrip("json").strip()
-        return json.loads(content)
+        if not content:
+            return {"is_risky": False, "risk_level": "none", "categories": [], "details": [], "summary": ""}
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            return {"is_risky": False, "risk_level": "none", "categories": [], "details": [], "summary": "Ошибка парсинга ответа LLM"}

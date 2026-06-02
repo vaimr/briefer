@@ -84,6 +84,10 @@ def process_task_sync(task_str: str, whisper: WhisperEngine, llm: LLMAPI, redis_
     logger.info("Summarized: %d chars", len(summary))
     logger.info("Risks: %s", risks.get("risk_level", "unknown"))
 
+    if not summary or not summary.strip():
+        logger.warning("Empty summary from LLM, using placeholder")
+        summary = "Нет данных для саммари"
+
     task_id = hashlib.sha256(audio_path.encode()).hexdigest()[:16]
     task_dir = RESULTS_DIR / task_id
     task_dir.mkdir(parents=True, exist_ok=True)
@@ -139,6 +143,18 @@ def process_task_sync(task_str: str, whisper: WhisperEngine, llm: LLMAPI, redis_
     }
     redis_conn.publish("task_results", json.dumps(message))
     logger.info("Results published: %d files to %s", len(all_files), task_dir)
+
+
+def publish_error(redis_conn, room_id: str, task_id: str, error: str) -> None:
+    """Publish a processing error to the error channel."""
+    message = {
+        "task_id": task_id,
+        "room_id": room_id,
+        "error": error,
+        "timestamp": datetime.now().isoformat(),
+    }
+    redis_conn.publish("task_errors", json.dumps(message))
+    logger.error("Error published for task %s: %s", task_id, error)
 
 
 def _summarize_and_risks_sync(llm: LLMAPI, transcript: str) -> tuple:
@@ -288,6 +304,13 @@ def main():
             except Exception as e:
                 logger.error("Error processing task: %s", e, exc_info=True)
                 WORKER_TASKS_PROCESSED.labels(status="error").inc()
+                try:
+                    task_str = task.decode()
+                    room_id = task_str.split("|", 1)[0] if "|" in task_str else "unknown"
+                    task_id = hashlib.sha256(task_str.split("|", 1)[1].encode()).hexdigest()[:16] if "|" in task_str else "unknown"
+                    publish_error(redis_conn, room_id, task_id, str(e))
+                except Exception:
+                    logger.error("Failed to publish error notification")
         except (ConnectionError, TimeoutError, redis.exceptions.RedisError) as e:
             logger.error("Redis connection error: %s. Reconnecting in 5s...", e)
             WORKER_TASKS_PROCESSED.labels(status="error").inc()

@@ -137,7 +137,10 @@ async def handle_non_audio_message(
 
 def get_audio_event_type(event) -> bool:
     """Проверка является ли событие аудио."""
-    return isinstance(event, RoomMessageAudio) or (
-        isinstance(event, RoomMessageFile)
-        and event.mime_type.startswith("audio/")
-    )
+    if isinstance(event, RoomMessageAudio):
+        return True
+    if isinstance(event, RoomMessageFile):
+        content = event.source.get("content", {})
+        mime = content.get("info", {}).get("mimetype", "")
+        return mime.startswith("audio/")
+    return False
