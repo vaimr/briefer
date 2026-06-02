@@ -62,6 +62,7 @@ async def _deliver_result(client, pubsub, data) -> None:
     room_id = data.get("room_id")
     task_id = data.get("task_id")
     original_filename = data.get("original_filename", "audio")
+    event_id = data.get("event_id")
     transcript_md = data.get("transcript_md")
     transcript_pdf = data.get("transcript_pdf")
     summary_md = data.get("summary_md")
@@ -97,17 +98,23 @@ async def _deliver_result(client, pubsub, data) -> None:
             resp, _ = await client.upload(BytesIO(file_data), content_type=mime, filename=name)
             mxc_uri = resp.content_uri
 
+            msg = {
+                "msgtype": "m.file",
+                "body": name,
+                "url": mxc_uri,
+                "info": {
+                    "mimetype": mime,
+                },
+            }
+            if event_id:
+                msg["m.relates_to"] = {
+                    "rel_type": "m.reference",
+                    "in_reply_to": {"event_id": event_id},
+                }
             await client.room_send(
                 room_id,
                 "m.room.message",
-                {
-                    "msgtype": "m.file",
-                    "body": name,
-                    "url": mxc_uri,
-                    "info": {
-                        "mimetype": mime,
-                    },
-                },
+                msg,
             )
             logger.info("Sent %s to %s: %s", name, room_id, mxc_uri)
 
@@ -118,22 +125,34 @@ async def _deliver_result(client, pubsub, data) -> None:
             risk_data = Path(risk_path).read_bytes()
             resp, _ = await client.upload(BytesIO(risk_data), content_type="application/pdf", filename=f"{base}_risk_alert.pdf")
             mxc_uri = resp.content_uri
+            msg = {
+                "msgtype": "m.file",
+                "body": f"{base}_risk_alert.pdf",
+                "url": mxc_uri,
+                "info": {"mimetype": "application/pdf"},
+            }
+            if event_id:
+                msg["m.relates_to"] = {
+                    "rel_type": "m.reference",
+                    "in_reply_to": {"event_id": event_id},
+                }
             await client.room_send(
                 room_id,
                 "m.room.message",
-                {
-                    "msgtype": "m.file",
-                    "body": f"{base}_risk_alert.pdf",
-                    "url": mxc_uri,
-                    "info": {"mimetype": "application/pdf"},
-                },
+                msg,
             )
             logger.info("Sent risk_alert.pdf to %s: %s", room_id, mxc_uri)
 
+        msg = {"msgtype": "m.notice", "body": "Результаты готовы!"}
+        if event_id:
+            msg["m.relates_to"] = {
+                "rel_type": "m.reference",
+                "in_reply_to": {"event_id": event_id},
+            }
         await client.room_send(
             room_id,
             "m.room.message",
-            {"msgtype": "m.notice", "body": "Результаты готовы!"},
+            msg,
         )
         logger.info("Results delivered to %s", room_id)
 

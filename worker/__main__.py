@@ -72,10 +72,11 @@ def task_timer():
 
 
 def process_task_sync(task_str: str, whisper: WhisperEngine, llm: LLMAPI, redis_conn, loop: asyncio.AbstractEventLoop) -> None:
-    parts = task_str.split("|", 2)
+    parts = task_str.split("|", 3)
     room_id = parts[0]
     audio_path = parts[1]
     original_filename = parts[2] if len(parts) > 2 else None
+    event_id = parts[3] if len(parts) > 3 else None
 
     logger.info("Processing: %s for %s", audio_path, room_id)
 
@@ -144,6 +145,7 @@ def process_task_sync(task_str: str, whisper: WhisperEngine, llm: LLMAPI, redis_
         "task_id": task_id,
         "room_id": room_id,
         "original_filename": original_filename or base,
+        "event_id": event_id,
         "transcript_md": str(transcript_md_path),
         "transcript_pdf": str(transcript_pdf),
         "summary_md": str(summary_md_path),
