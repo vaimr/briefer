@@ -1,8 +1,11 @@
 """Whisper transcription engine."""
 
+import logging
 import os
 import subprocess
 from faster_whisper import WhisperModel
+
+logger = logging.getLogger(__name__)
 
 
 class WhisperEngine:
@@ -22,9 +25,9 @@ class WhisperEngine:
         """
         wav_path = audio_path.rsplit(".", 1)[0] + ".wav"
         tmp_path = wav_path + ".tmp"
-        subprocess.run(
+        result = subprocess.run(
             ["ffmpeg", "-i", audio_path, "-ar", "16000", "-ac", "1", "-y", tmp_path],
-            check=True, capture_output=True,
+            check=True, capture_output=True, timeout=300,
         )
         os.replace(tmp_path, wav_path)
 
