@@ -106,7 +106,7 @@ class TestHandleAudioMessage:
 
         client.download.assert_called_once_with("mxc://server/audio")
         expected_id = _safe_msg_id("$msg1")
-        queue_push.assert_called_once_with("!room:server|{}/{}.ogg".format(download_dir, expected_id))
+        queue_push.assert_called_once_with("!room:server|{}/{}.ogg|test.ogg".format(download_dir, expected_id))
         client.room_send.assert_called_once()
         assert "Файл принят" in client.room_send.call_args[0][2]["body"]
         assert result == "{}/{}.ogg".format(download_dir, expected_id)

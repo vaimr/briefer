@@ -101,7 +101,7 @@ async def handle_audio_message(
     with open(filename, "wb") as f:
         f.write(resp.body)
 
-    queue_push(f"{room_id}|{filename}")
+    queue_push(f"{room_id}|{filename}|{raw_filename}")
     BOT_MESSAGES_PROCESSED.labels(status="queued").inc()
 
     await client.room_send(

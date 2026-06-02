@@ -72,7 +72,10 @@ def task_timer():
 
 
 def process_task_sync(task_str: str, whisper: WhisperEngine, llm: LLMAPI, redis_conn, loop: asyncio.AbstractEventLoop) -> None:
-    room_id, audio_path = task_str.split("|", 1)
+    parts = task_str.split("|", 2)
+    room_id = parts[0]
+    audio_path = parts[1]
+    original_filename = parts[2] if len(parts) > 2 else None
 
     logger.info("Processing: %s for %s", audio_path, room_id)
 
@@ -93,6 +96,12 @@ def process_task_sync(task_str: str, whisper: WhisperEngine, llm: LLMAPI, redis_
     task_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Task directory: %s", task_dir)
 
+    # Extract base name from original filename, fallback to audio_path stem
+    if original_filename:
+        base = os.path.splitext(original_filename)[0]
+    else:
+        base = os.path.splitext(os.path.basename(audio_path))[0]
+
     transcript_md = (
         f"# Полная транскрипция\n\n"
         f"**Дата:** {get_date()}\n"
@@ -101,14 +110,14 @@ def process_task_sync(task_str: str, whisper: WhisperEngine, llm: LLMAPI, redis_
     )
     summary_md = f"# Саммари встречи\n\n{summary}"
 
-    transcript_md_path = task_dir / "transcript.md"
-    summary_md_path = task_dir / "summary.md"
+    transcript_md_path = task_dir / f"{base}_transcript.md"
+    summary_md_path = task_dir / f"{base}_summary.md"
     transcript_md_path.write_text(transcript_md, encoding="utf-8")
     summary_md_path.write_text(summary_md, encoding="utf-8")
     logger.info("Markdown files: %s, %s", transcript_md_path, summary_md_path)
 
-    transcript_pdf = generate_pdf(transcript_md, f"{task_dir}/transcript")
-    summary_pdf = generate_pdf(summary_md, f"{task_dir}/summary")
+    transcript_pdf = generate_pdf(transcript_md, f"{task_dir}/{base}_transcript")
+    summary_pdf = generate_pdf(summary_md, f"{task_dir}/{base}_summary")
     logger.info("PDF files: %s, %s", transcript_pdf, summary_pdf)
 
     risk_files = []
@@ -134,6 +143,7 @@ def process_task_sync(task_str: str, whisper: WhisperEngine, llm: LLMAPI, redis_
     message = {
         "task_id": task_id,
         "room_id": room_id,
+        "original_filename": original_filename or base,
         "transcript_md": str(transcript_md_path),
         "transcript_pdf": str(transcript_pdf),
         "summary_md": str(summary_md_path),

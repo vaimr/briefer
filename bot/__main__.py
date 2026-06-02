@@ -61,24 +61,26 @@ async def _deliver_result(client, pubsub, data) -> None:
     """Deliver transcription result to the Matrix room."""
     room_id = data.get("room_id")
     task_id = data.get("task_id")
+    original_filename = data.get("original_filename", "audio")
     transcript_md = data.get("transcript_md")
     transcript_pdf = data.get("transcript_pdf")
     summary_md = data.get("summary_md")
     summary_pdf = data.get("summary_pdf")
     risk_files = data.get("risk_files", [])
 
+    base = original_filename.rsplit(".", 1)[0] if "." in original_filename else original_filename
+
     if not all([room_id, task_id, transcript_md, transcript_pdf, summary_md, summary_pdf]):
         logger.error("Invalid result data: %s", data)
         return
 
     try:
-        import os
 
         files_to_send = [
-            (transcript_md, "transcript.md", "text/markdown"),
-            (transcript_pdf, "transcript.pdf", "application/pdf"),
-            (summary_md, "summary.md", "text/markdown"),
-            (summary_pdf, "summary.pdf", "application/pdf"),
+            (transcript_md, f"{base}_transcript.md", "text/markdown"),
+            (transcript_pdf, f"{base}_transcript.pdf", "application/pdf"),
+            (summary_md, f"{base}_summary.md", "text/markdown"),
+            (summary_pdf, f"{base}_summary.pdf", "application/pdf"),
         ]
         for path, name, mime in files_to_send:
             if not os.path.exists(path):
@@ -114,14 +116,14 @@ async def _deliver_result(client, pubsub, data) -> None:
                 logger.warning("Risk file not found: %s", risk_path)
                 continue
             risk_data = Path(risk_path).read_bytes()
-            resp, _ = await client.upload(BytesIO(risk_data), content_type="application/pdf", filename="risk_alert.pdf")
+            resp, _ = await client.upload(BytesIO(risk_data), content_type="application/pdf", filename=f"{base}_risk_alert.pdf")
             mxc_uri = resp.content_uri
             await client.room_send(
                 room_id,
                 "m.room.message",
                 {
                     "msgtype": "m.file",
-                    "body": "risk_alert.pdf",
+                    "body": f"{base}_risk_alert.pdf",
                     "url": mxc_uri,
                     "info": {"mimetype": "application/pdf"},
                 },
