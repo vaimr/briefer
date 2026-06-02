@@ -101,6 +101,13 @@ async def handle_audio_message(
     with open(filename, "wb") as f:
         f.write(resp.body)
 
+    file_size = os.path.getsize(filename)
+    logger.info("Downloaded: %s (%d bytes), filename=%s, url=%s", filename, file_size, raw_filename, event.url)
+    # Проверка что файл не пустой и не HTML
+    with open(filename, "rb") as f:
+        header = f.read(20)
+        logger.info("File header: %r", header)
+
     event_id = getattr(event, "event_id", None)
     queue_push(f"{room_id}|{filename}|{raw_filename}|{event_id}")
     BOT_MESSAGES_PROCESSED.labels(status="queued").inc()
