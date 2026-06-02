@@ -4,7 +4,7 @@ import hashlib
 import logging
 import os
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -156,6 +156,50 @@ class TestHandleAudioMessage:
 
         expected_id = _safe_msg_id("$msg3")
         assert "{}/{}.wav".format(download_dir, expected_id) in result
+
+    @pytest.mark.asyncio
+    async def test_logs_file_header(self, tmp_path: Path):
+        """When audio downloaded → log file size and header bytes."""
+        import logging
+        client = AsyncMock()
+        client.download = AsyncMock(return_value=Mock(body=b"audio data"))
+
+        event = Mock()
+        event.url = "mxc://server/audio"
+        event.event_id = "$msg4"
+        event.source = {"content": {"filename": "test.ogg", "msgtype": "m.audio", "body": "test.ogg"}}
+
+        download_dir = str(tmp_path / "input4")
+        os.makedirs(download_dir, exist_ok=True)
+        queue_push = Mock()
+
+        with patch("bot.matrix_client._matrix_logger") as mock_logger:
+            await handle_audio_message(client, "!room:server", event, download_dir, queue_push)
+            assert mock_logger.info.call_count >= 2
+
+    @pytest.mark.asyncio
+    async def test_queue_format_with_event_id(self, tmp_path: Path):
+        """When audio queued → format is room_id|path|filename|event_id."""
+        client = AsyncMock()
+        client.download = AsyncMock(return_value=Mock(body=b"audio data"))
+
+        event = Mock()
+        event.url = "mxc://server/audio"
+        event.event_id = "$test_event_id"
+        event.source = {"content": {"filename": "test.ogg", "msgtype": "m.audio", "body": "test.ogg"}}
+
+        download_dir = str(tmp_path / "input5")
+        os.makedirs(download_dir, exist_ok=True)
+        queue_push = Mock()
+
+        await handle_audio_message(client, "!room:server", event, download_dir, queue_push)
+
+        call_args = queue_push.call_args[0][0]
+        parts = call_args.split("|")
+        assert len(parts) == 4
+        assert parts[0] == "!room:server"
+        assert parts[2] == "test.ogg"
+        assert parts[3] == "$test_event_id"
 
 
 class TestHandleNonAudioMessage:
