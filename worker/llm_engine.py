@@ -72,7 +72,9 @@ class LLMAPI:
         }
         resp = requests.post(f"{self.api_url}/chat/completions", json=payload)
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"].strip()
+        result = resp.json()["choices"][0]["message"]["content"].strip()
+        logger.debug("LLM chat response (first 200 chars): %s", result[:200])
+        return result
 
     def summarize(self, transcript: str) -> str:
         """Суммаризация транскрипции."""

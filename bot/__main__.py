@@ -242,16 +242,17 @@ async def main():
     bot_user_id = client.user_id
     async def callback(room, event):
         try:
-            if event.sender == bot_user_id:
-                logger.debug("Skipping own message: %s", type(event).__name__)
+            sender = event.sender
+            if sender == settings.MATRIX_USER:
+                logger.debug("Skipping own message: %s sender=%s", type(event).__name__, sender)
                 return
 
             room_id = room.room_id
             message_id = event.source.get("event_id", "unknown")
-            logger.info("Received event: room=%s, type=%s, message_id=%s, sender=%s", room_id, type(event).__name__, message_id, event.sender)
+            logger.info("Received event: room=%s, type=%s, message_id=%s, sender=%s", room_id, type(event).__name__, message_id, sender)
 
             # Skip non-audio files (pdf, md) sent by bot
-            if isinstance(event, RoomMessageFile) and event.sender == bot_user_id:
+            if isinstance(event, RoomMessageFile) and sender == settings.MATRIX_USER:
                 return
 
             if get_audio_event_type(event):
