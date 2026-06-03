@@ -72,7 +72,10 @@ class LLMAPI:
         }
         resp = requests.post(f"{self.api_url}/chat/completions", json=payload)
         resp.raise_for_status()
-        result = resp.json()["choices"][0]["message"]["content"].strip()
+        choice = resp.json()["choices"][0]["message"]
+        result = choice.get("content", "").strip()
+        if not result:
+            result = choice.get("reasoning_content", "").strip()
         logger.debug("LLM chat response (first 200 chars): %s", result[:200])
         return result
 
