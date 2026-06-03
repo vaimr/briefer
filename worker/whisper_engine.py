@@ -28,9 +28,9 @@ class WhisperEngine:
         logger.info("Transcribing: %s (size=%d bytes)", audio_path, file_size)
 
         wav_path = audio_path.rsplit(".", 1)[0] + ".wav"
-        tmp_path = wav_path + ".tmp.wav"
+        tmp_path = audio_path.rsplit(".", 1)[0] + ".tmp.wav"
         result = subprocess.run(
-            ["ffmpeg", "-i", audio_path, "-ar", "16000", "-ac", "1", "-y", tmp_path],
+            ["ffmpeg", "-i", audio_path, "-ar", "16000", "-ac", "1", "-f", "wav", "-y", tmp_path],
             capture_output=True, timeout=300,
         )
         if result.returncode != 0:
