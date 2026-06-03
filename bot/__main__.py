@@ -76,6 +76,7 @@ async def _deliver_result(client, pubsub, data) -> None:
         return
 
     try:
+        import os
 
         files_to_send = [
             (transcript_md, f"{base}_transcript.md", "text/markdown"),
