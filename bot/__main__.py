@@ -243,7 +243,10 @@ async def main():
     async def callback(room, event):
         try:
             sender = event.sender
-            if sender == settings.MATRIX_USER:
+            # Compare by localpart + domain (strip @) to handle both @user:server and user:server formats
+            bot_user = settings.MATRIX_USER.lstrip("@")
+            sender_clean = sender.lstrip("@")
+            if sender_clean == bot_user:
                 logger.debug("Skipping own message: %s sender=%s", type(event).__name__, sender)
                 return
 
@@ -252,7 +255,7 @@ async def main():
             logger.info("Received event: room=%s, type=%s, message_id=%s, sender=%s", room_id, type(event).__name__, message_id, sender)
 
             # Skip non-audio files (pdf, md) sent by bot
-            if isinstance(event, RoomMessageFile) and sender == settings.MATRIX_USER:
+            if isinstance(event, RoomMessageFile) and sender_clean == bot_user:
                 return
 
             if get_audio_event_type(event):
