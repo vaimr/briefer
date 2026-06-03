@@ -204,3 +204,42 @@ def test_chat_raises_on_http_error(llm):
     with patch(_PATCH_TARGET, side_effect=http_exc):
         with pytest.raises(requests.exceptions.HTTPError):
             llm.chat("system", "user")
+
+
+# ── _extract_response_from_reasoning ──────────────────────────────
+
+
+def test_extract_response_strips_thinking_process(llm):
+    """Reasoning content with thinking process returns only the actual response."""
+    reasoning = (
+        "Here's a thinking process:\n"
+        "1. Analyze input\n"
+        "2. Extract info\n"
+        "3. Generate summary\n\n"
+        "**Саммари встречи**\n"
+        "**Дата:** не указано\n"
+        "**Тема:** Презентация\n"
+        "**Задачи:** не обсуждались"
+    )
+    result = llm._extract_response_from_reasoning(reasoning)
+    assert result.startswith("**Саммари встречи**")
+    assert "Here's a thinking process" not in result
+
+
+def test_extract_response_prefers_first_pattern(llm):
+    """Returns content starting from the first matching pattern."""
+    reasoning = (
+        "Thinking...\n"
+        "**Саммари встречи**\n"
+        "Some content\n"
+        "**Дата и время:** не указано"
+    )
+    result = llm._extract_response_from_reasoning(reasoning)
+    assert result.startswith("**Саммари встречи**")
+
+
+def test_extract_response_returns_as_is_when_no_pattern(llm):
+    """When no pattern found, returns the full text."""
+    reasoning = "Just a plain response without any patterns"
+    result = llm._extract_response_from_reasoning(reasoning)
+    assert result == reasoning
