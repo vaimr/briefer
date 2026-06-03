@@ -76,7 +76,9 @@ class LLMAPI:
 
     def summarize(self, transcript: str) -> str:
         """Суммаризация транскрипции."""
-        return self.chat(SUMMARIZE_PROMPT, transcript, temperature=0.1, max_tokens=1500)
+        result = self.chat(SUMMARIZE_PROMPT, transcript, temperature=0.1, max_tokens=1500)
+        logger.info("LLM summarize response: %d chars", len(result))
+        return result
 
     def check_risks(self, transcript: str) -> dict:
         """Выявление опасных обсуждений. Возвращает JSON-объект."""
