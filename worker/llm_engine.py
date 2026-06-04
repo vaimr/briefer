@@ -86,7 +86,7 @@ class LLMAPI:
             return text[last_idx:].strip()
         return text.strip()
 
-    def chat(self, system_prompt: str, user_content: str, temperature: float = 0.1, max_tokens: int = 1500) -> str:
+    def chat(self, system_prompt: str, user_content: str, temperature: float = 0.1) -> str:
         """Отправка запроса к LLM API."""
         payload = {
             "model": self.model,
@@ -95,7 +95,6 @@ class LLMAPI:
                 {"role": "user", "content": user_content},
             ],
             "temperature": temperature,
-            "max_tokens": max_tokens,
             "top_p": 0.9,
         }
         resp = requests.post(f"{self.api_url}/chat/completions", json=payload)
@@ -110,13 +109,13 @@ class LLMAPI:
 
     def summarize(self, transcript: str) -> str:
         """Суммаризация транскрипции."""
-        result = self.chat(SUMMARIZE_PROMPT, transcript, temperature=0.1, max_tokens=1500)
+        result = self.chat(SUMMARIZE_PROMPT, transcript, temperature=0.1)
         logger.info("LLM summarize response: %d chars", len(result))
         return result
 
     def check_risks(self, transcript: str) -> dict:
         """Выявление опасных обсуждений. Возвращает JSON-объект."""
-        content = self.chat(RISK_PROMPT, transcript, temperature=0.0, max_tokens=1000)
+        content = self.chat(RISK_PROMPT, transcript, temperature=0.0)
         if "```" in content:
             content = content.split("```")[1].lstrip("json").strip()
         if not content:
