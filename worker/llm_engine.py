@@ -63,19 +63,27 @@ class LLMAPI:
     @staticmethod
     def _extract_response_from_reasoning(text: str) -> str:
         """Извлекает фактический ответ из reasoning content, отсекая thinking process."""
+        # Модель Qwen3.6-35B-A3B-MTP включает финальный ответ в reasoning_content.
+        # Thinking process тоже содержит "# Саммари встречи" в outline,
+        # но финальный ответ — ПОСЛЕДНЕЕ вхождение.
+        # Важно: ищем "## Саммари встречи" ПЕРЕД "# Саммари встречи",
+        # иначе rfind("# ...") найдёт # внутри "## ...".
         patterns = [
-            "**Саммари встречи**",
-            "Саммари встречи",
             "## Саммари встречи",
             "# Саммари встречи",
-            "**Дата и время:**",
-            "## Ключевые обсуждения",
-            "## Задачи",
         ]
+        last_idx = -1
         for pattern in patterns:
-            if pattern in text:
-                idx = text.find(pattern)
-                return text[idx:].strip()
+            idx = text.rfind(pattern)
+            if idx < 0:
+                continue
+            # Игнорируем "# Саммари встречи" когда это часть "## Саммари встречи"
+            if pattern == "# Саммари встречи" and idx > 0 and text[idx - 1] == "#":
+                continue
+            if idx > last_idx:
+                last_idx = idx
+        if last_idx >= 0:
+            return text[last_idx:].strip()
         return text.strip()
 
     def chat(self, system_prompt: str, user_content: str, temperature: float = 0.1, max_tokens: int = 1500) -> str:

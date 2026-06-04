@@ -216,26 +216,57 @@ def test_extract_response_strips_thinking_process(llm):
         "1. Analyze input\n"
         "2. Extract info\n"
         "3. Generate summary\n\n"
-        "**Саммари встречи**\n"
+        "# Саммари встречи\n"
         "**Дата:** не указано\n"
         "**Тема:** Презентация\n"
         "**Задачи:** не обсуждались"
     )
     result = llm._extract_response_from_reasoning(reasoning)
-    assert result.startswith("**Саммари встречи**")
+    assert result.startswith("# Саммари встречи")
     assert "Here's a thinking process" not in result
 
 
-def test_extract_response_prefers_first_pattern(llm):
-    """Returns content starting from the first matching pattern."""
+def test_extract_response_strips_thinking_process_h2(llm):
+    """Reasoning content with ## Саммари встречи returns only the actual response."""
     reasoning = (
         "Thinking...\n"
-        "**Саммари встречи**\n"
-        "Some content\n"
-        "**Дата и время:** не указано"
+        "Steps 1-5...\n"
+        "## Саммари встречи\n"
+        "**Дата:** не указано\n"
+        "**Тема:** Презентация"
     )
     result = llm._extract_response_from_reasoning(reasoning)
-    assert result.startswith("**Саммари встречи**")
+    assert result.startswith("## Саммари встречи")
+    assert "Thinking" not in result
+
+
+def test_extract_response_prefers_h1_over_h2(llm):
+    """Prefers '# Саммари встречи' over '## Саммари встречи' when both present (uses last occurrence)."""
+    reasoning = (
+        "## Саммари встречи\n"
+        "H2 content\n"
+        "# Саммари встречи\n"
+        "H1 content"
+    )
+    result = llm._extract_response_from_reasoning(reasoning)
+    assert result.startswith("# Саммари встречи")
+    assert "H1 content" in result
+
+
+def test_extract_response_uses_last_occurrence(llm):
+    """When pattern appears multiple times, uses the LAST occurrence (final response)."""
+    reasoning = (
+        "Thinking...\n"
+        "# Саммари встречи\n"
+        "Draft 1\n"
+        "More thinking...\n"
+        "# Саммари встречи\n"
+        "**Дата:** не указано\n"
+        "**Тема:** Финальный ответ"
+    )
+    result = llm._extract_response_from_reasoning(reasoning)
+    assert "Draft 1" not in result
+    assert "Финальный ответ" in result
 
 
 def test_extract_response_returns_as_is_when_no_pattern(llm):
