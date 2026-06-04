@@ -28,6 +28,7 @@ def _make_mock_settings(**overrides):
     s.MATRIX_USER = overrides.get("MATRIX_USER", "@bot:example.com")
     s.MATRIX_ACCESS_TOKEN = overrides.get("MATRIX_ACCESS_TOKEN", "tok123")
     s.MATRIX_PASSWORD = overrides.get("MATRIX_PASSWORD", None)
+    s.LOG_LEVEL = overrides.get("LOG_LEVEL", "INFO")
     s.validate_required = MagicMock()
     return s
 

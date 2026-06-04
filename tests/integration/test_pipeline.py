@@ -141,8 +141,8 @@ class TestPDFGeneration:
         output_path = tmp_work_dir / "output.pdf"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with patch("worker.pdf_generator.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stderr="")
+        with patch("worker.pdf_generator.HTML") as mock_html:
+            mock_html.return_value.write_pdf.return_value = None
             output_path.write_bytes(b"%PDF-1.4 dummy")
 
             generator = PDFGenerator()
@@ -159,8 +159,8 @@ class TestPDFGeneration:
         output_path = tmp_work_dir / "no_summary.pdf"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with patch("worker.pdf_generator.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stderr="")
+        with patch("worker.pdf_generator.HTML") as mock_html:
+            mock_html.return_value.write_pdf.return_value = None
             output_path.write_bytes(b"%PDF-1.4 dummy")
 
             generator = PDFGenerator()
@@ -177,8 +177,8 @@ class TestPDFGeneration:
         output_path = tmp_work_dir / "long.pdf"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with patch("worker.pdf_generator.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stderr="")
+        with patch("worker.pdf_generator.HTML") as mock_html:
+            mock_html.return_value.write_pdf.return_value = None
             output_path.write_bytes(b"%PDF-1.4 dummy")
 
             generator = PDFGenerator()
@@ -626,8 +626,8 @@ class TestFullPipelineSimulation:
         output_path = tmp_work_dir / "pipeline_output.pdf"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with patch("worker.pdf_generator.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stderr="")
+        with patch("worker.pdf_generator.HTML") as mock_html:
+            mock_html.return_value.write_pdf.return_value = None
             output_path.write_bytes(b"%PDF-1.4 dummy")
 
             generator = PDFGenerator()
@@ -653,8 +653,8 @@ class TestFullPipelineSimulation:
         output_path = tmp_work_dir / "empty.pdf"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with patch("worker.pdf_generator.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stderr="")
+        with patch("worker.pdf_generator.HTML") as mock_html:
+            mock_html.return_value.write_pdf.return_value = None
             output_path.write_bytes(b"%PDF-1.4 dummy")
 
             generator = PDFGenerator()
@@ -687,8 +687,8 @@ class TestFullPipelineSimulation:
         output_path = tmp_work_dir / "long.pdf"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with patch("worker.pdf_generator.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stderr="")
+        with patch("worker.pdf_generator.HTML") as mock_html:
+            mock_html.return_value.write_pdf.return_value = None
             output_path.write_bytes(b"%PDF-1.4 dummy")
 
             generator = PDFGenerator()

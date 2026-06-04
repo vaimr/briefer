@@ -83,7 +83,7 @@ class TestPDFEdgeCases:
     """Test PDF generation edge cases."""
 
     def test_generate_pdf_with_cyrillic_text(self, tmp_work_dir):
-        """PDF should support Cyrillic characters (mocked pandoc)."""
+        """PDF should support Cyrillic characters (mocked WeasyPrint)."""
         from worker.pdf_generator import PDFGenerator
 
         transcription = "Это транскрипция на русском языке. Обсуждались quarterly results."
@@ -91,17 +91,16 @@ class TestPDFEdgeCases:
         output_path = tmp_work_dir / "cyrillic.pdf"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with patch("worker.pdf_generator.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stderr="")
-            output_path.write_bytes(b"%PDF-1.4 dummy")
-
+        mock_pdf = MagicMock()
+        with patch("worker.pdf_generator.HTML") as mock_html:
+            mock_html.return_value.write_pdf.return_value = None
             generator = PDFGenerator()
             result = generator.generate(transcription, summary, output_path)
 
         assert result.exists(), "PDF with Cyrillic should be created"
 
     def test_generate_pdf_with_special_characters(self, tmp_work_dir):
-        """PDF should handle special characters in text (mocked pandoc)."""
+        """PDF should handle special characters in text (mocked WeasyPrint)."""
         from worker.pdf_generator import PDFGenerator
 
         transcription = "Meeting with <script>alert('xss')</script> and special chars: @#$%^&*()"
@@ -109,10 +108,9 @@ class TestPDFEdgeCases:
         output_path = tmp_work_dir / "special.pdf"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with patch("worker.pdf_generator.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stderr="")
-            output_path.write_bytes(b"%PDF-1.4 dummy")
-
+        mock_pdf = MagicMock()
+        with patch("worker.pdf_generator.HTML") as mock_html:
+            mock_html.return_value.write_pdf.return_value = None
             generator = PDFGenerator()
             result = generator.generate(transcription, summary, output_path)
 
@@ -127,8 +125,8 @@ class TestPDFEdgeCases:
         output_path = tmp_work_dir / "emoji.pdf"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with patch("worker.pdf_generator.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stderr="")
+        with patch("worker.pdf_generator.HTML") as mock_html:
+            mock_html.return_value.write_pdf.return_value = None
             output_path.write_bytes(b"%PDF-1.4 dummy")
 
             generator = PDFGenerator()
@@ -454,8 +452,8 @@ class TestFullPipelineEdgeCases:
         output_path = tmp_work_dir / "empty.pdf"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with patch("worker.pdf_generator.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stderr="")
+        with patch("worker.pdf_generator.HTML") as mock_html:
+            mock_html.return_value.write_pdf.return_value = None
             output_path.write_bytes(b"%PDF-1.4 dummy")
 
             generator = PDFGenerator()
@@ -485,14 +483,14 @@ class TestFullPipelineEdgeCases:
         assert len(result) <= 2000  # MAX_SUMMARY_LENGTH
 
     def test_pipeline_pdf_generation_fails(self, tmp_work_dir):
-        """PDF generation failure should raise ValueError."""
+        """PDF generation failure should raise exception."""
         from worker.pdf_generator import PDFGenerator
 
         output_path = tmp_work_dir / "fail.pdf"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         generator = PDFGenerator()
-        with patch("worker.pdf_generator.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=1, stderr="pandoc error")
-            with pytest.raises(ValueError, match="Pandoc failed"):
+        with patch("worker.pdf_generator.HTML") as mock_html:
+            mock_html.return_value.write_pdf.side_effect = Exception("WeasyPrint error")
+            with pytest.raises(Exception, match="WeasyPrint error"):
                 generator.generate("text", "summary", output_path)

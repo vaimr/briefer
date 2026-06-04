@@ -62,6 +62,7 @@ def mock_event():
     event.url = "https://matrix.example.com/media/abc123"
     event.message_id = "msg_001"
     event.original_filename = "test.wav"
+    event.source = {"event_id": "msg_001"}
     return event
 
 
@@ -139,7 +140,7 @@ class TestDownloadAudio:
         """download_audio() saves file and returns Path."""
         result = await downloader.download_audio(mock_client, mock_event)
         assert result.is_file()
-        assert result.name == "msg_001.wav"
+        assert result.name == "e81290fd63618261.wav"
 
     @pytest.mark.asyncio
     async def test_download_calls_client_download(self, downloader, mock_client, mock_event):
@@ -162,6 +163,7 @@ class TestDownloadAudio:
         event = MagicMock()
         event.url = "https://matrix.example.com/audio.flac"
         event.message_id = "msg_002"
+        event.source = {"event_id": "msg_002"}
         del event.original_filename
 
         downloader = AudioDownloader(config, data_dir=tmp_data_dir)
@@ -177,9 +179,9 @@ class TestDownloadAudio:
 
     @pytest.mark.asyncio
     async def test_download_no_message_id_raises(self, downloader, mock_client, mock_event):
-        """download_audio() raises ValueError when event has no message_id."""
-        mock_event.message_id = None
-        with pytest.raises(ValueError, match="no message_id"):
+        """download_audio() raises ValueError when event has no event_id."""
+        mock_event.source = {}
+        with pytest.raises(ValueError, match="no event_id"):
             await downloader.download_audio(mock_client, mock_event)
 
     @pytest.mark.asyncio
@@ -190,6 +192,7 @@ class TestDownloadAudio:
         event = MagicMock()
         event.url = "https://matrix.example.com/media/xyz"
         event.message_id = "msg_003"
+        event.source = {"event_id": "msg_003"}
         del event.original_filename
 
         downloader = AudioDownloader(config, data_dir=tmp_data_dir)
@@ -409,9 +412,9 @@ class TestFilePathFormat:
 
     @pytest.mark.asyncio
     async def test_file_path_format(self, downloader, mock_client, mock_event):
-        """Downloaded file is at data_dir/{message_id}.{ext}."""
+        """Downloaded file is at data_dir/{event_id_hash}.{ext}."""
         result = await downloader.download_audio(mock_client, mock_event)
-        expected_name = f"{mock_event.message_id}.wav"
+        expected_name = "e81290fd63618261.wav"
         assert result.name == expected_name
         assert str(result.parent) == str(downloader.data_dir)
 
@@ -421,10 +424,11 @@ class TestFilePathFormat:
         event = MagicMock()
         event.url = "https://matrix.example.com/media/xyz"
         event.message_id = "msg_007"
+        event.source = {"event_id": "msg_007"}
         event.original_filename = "podcast.mp3"
 
         result = await downloader.download_audio(mock_client, event)
-        assert result.name == "msg_007.mp3"
+        assert result.name == "2b3e930c8324934c.mp3"
 
 
 # ---------------------------------------------------------------------------
@@ -446,6 +450,7 @@ class TestFullFlow:
         event = MagicMock()
         event.url = "https://matrix.example.com/media/test123"
         event.message_id = "msg_flow_001"
+        event.source = {"event_id": "msg_flow_001"}
         event.original_filename = "test.wav"
 
         # 1. Download
@@ -459,4 +464,4 @@ class TestFullFlow:
         # 3. Send to queue
         redis_conn = FakeRedis()
         key = downloader.send_to_queue(redis_conn, file_path)
-        assert "msg_flow_001" in key
+        assert "d78e9a75fd4ef294" in key
