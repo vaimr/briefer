@@ -132,78 +132,61 @@ curl http://localhost:8082/health   # worker
 docker compose logs -f bot worker
 ```
 
-## Настройки
+## Настройки (`.env`)
 
-### Bot (`.env`)
+Все переменные окружения задаются в `.env` (скопируйте `.env.example`).
 
-| Переменная              | По умолчанию       | Описание                          |
-|------------------------|--------------------|-----------------------------------|
-| `MATRIX_HOMESERVER`    | *(required)*       | URL Matrix homeserver             |
-| `MATRIX_USER`          | *(required)*       | Bot аккаунт (с @)                 |
-| `MATRIX_PASSWORD`      | *(required)*       | Пароль бота                       |
-| `MATRIX_ACCESS_TOKEN`  |                    | Токен вместо пароля               |
-| `REDIS_HOST`           | `redis`            | Redis host                        |
-| `REDIS_PORT`           | `6379`             | Redis port                        |
-| `LOG_LEVEL`            | `INFO`             | Уровень логирования               |
-| `HEALTH_PORT`          | `8081`             | Порт /health + metrics            |
-| `HELP_TEXT_FILE`       | `/etc/briefer/help.txt` | Путь к файлу help-сообщения |
-| `TZ`                   | `Europe/Moscow`    | Часовой                           |
+### Matrix-аутентификация
 
-### Worker (`.env` / docker-compose.yml)
+Бот подключается к Matrix для прослушивания сообщений. **Приоритет: `MATRIX_ACCESS_TOKEN` > `MATRIX_PASSWORD`**.
 
-| Переменная              | По умолчанию              | Описание                          |
-|------------------------|---------------------------|-----------------------------------|
-| `WORKER_REDIS_HOST`    | `redis`                   | Redis host                        |
-| `WORKER_REDIS_PORT`    | `6379`                    | Redis port                        |
-| `WORKER_WHISPER_MODEL` | `large-v3`                | Whisper модель (tiny/base/small/medium/large-v3) |
-| `WORKER_DATA_DIR`      | `/data`                   | Директория для входных аудио      |
-| `WORKER_HEALTH_PORT`   | `8082`                    | Порт /health + metrics            |
-| `LOG_LEVEL`            | `INFO`                    | Уровень логирования               |
-| `MAX_TASK_DURATION`    | `900`                     | Макс. длительность задачи (сек)   |
-| `MAX_RETRIES`          | `3`                       | Макс. ретраев при ошибке          |
+| Переменная              | По умолчанию       | Обязательно | Описание                          |
+|------------------------|--------------------|-------------|-----------------------------------|
+| `MATRIX_HOMESERVER`    | *(required)*       | ✅ да       | URL Matrix homeserver (`https://...`) |
+| `MATRIX_USER`          | *(required)*       | ✅ да       | Bot аккаунт (с `@`, напр. `@bot:server.com`) |
+| `MATRIX_ACCESS_TOKEN`  |                    | 🔑 да¹      | **Приоритет:** токен аутентификации |
+| `MATRIX_PASSWORD`      |                    | ✅ да²      | Пароль (используется если токен не задан) |
 
-### Подключение к LLM
+> ¹ Если задан `MATRIX_ACCESS_TOKEN` — пароль игнорируется.
+> ² Если не задан ни токен, ни пароль — бот не запустится.
 
-Worker общается с LLM через **OpenAI-compatible `/chat/completions`** API.
+### Redis
 
-#### Переменные
+| Переменная              | По умолчанию | Описание                          |
+|------------------------|--------------|-----------------------------------|
+| `REDIS_HOST`           | `redis`      | Host Redis-сервера                |
+| `REDIS_PORT`           | `6379`       | Порт Redis                        |
+
+### LLM (Worker)
+
+Worker общается с LLM через **OpenAI-compatible `/chat/completions`** API (vLLM, Ollama, OpenAI, Anthropic-proxy и т.д.).
 
 | Переменная              | По умолчанию              | Обязательно | Описание                          |
 |------------------------|---------------------------|-------------|-----------------------------------|
 | `WORKER_LLM_API_URL`   | `http://faex:8080/v1`     | ✅ да       | Базовый URL LLM API               |
 | `WORKER_LLM_MODEL_NAME`| `qwen3.6-a3b-mtp:35b`     | ✅ да       | Имя модели для запросов           |
 
-#### Примеры конфигурации
+#### Примеры LLM-бэкендов
 
-**vLLM (локальный):**
-```yaml
-environment:
-  - WORKER_LLM_API_URL=http://vllm-host:8000/v1
-  - WORKER_LLM_MODEL_NAME=your-model-name
+```bash
+# vLLM (локальный)
+WORKER_LLM_API_URL=http://vllm-host:8000/v1
+WORKER_LLM_MODEL_NAME=your-model-name
+
+# Ollama (локальный)
+WORKER_LLM_API_URL=http://localhost:11434/v1
+WORKER_LLM_MODEL_NAME=qwen3:8b
+
+# OpenAI (облако)
+WORKER_LLM_API_URL=https://api.openai.com/v1
+WORKER_LLM_MODEL_NAME=gpt-4o
+
+# Anthropic (через OpenAI-совместимый прокси)
+WORKER_LLM_API_URL=https://your-proxy/v1
+WORKER_LLM_MODEL_NAME=claude-sonnet-4-20250514
 ```
 
-**Ollama (локальный):**
-```yaml
-environment:
-  - WORKER_LLM_API_URL=http://localhost:11434/v1
-  - WORKER_LLM_MODEL_NAME=qwen3:8b
-```
-
-**OpenAI (облако):**
-```yaml
-environment:
-  - WORKER_LLM_API_URL=https://api.openai.com/v1
-  - WORKER_LLM_MODEL_NAME=gpt-4o
-```
-
-**Anthropic (через OpenAI-совместимый прокси):**
-```yaml
-environment:
-  - WORKER_LLM_API_URL=https://your-proxy/v1
-  - WORKER_LLM_MODEL_NAME=claude-sonnet-4-20250514
-```
-
-#### Параметры запроса
+#### Параметры запроса к LLM
 
 | Параметр      | Значение  | Описание                          |
 |--------------|-----------|-----------------------------------|
@@ -215,7 +198,7 @@ environment:
 
 #### Поддержка reasoning models
 
-Worker поддерживает модели с reasoning (Qwen3.6-MTP и аналоги). Если в ответе есть `reasoning_content`, бот извлекает финальный ответ из него (ищет последнее вхождение `## Саммари встречи` или `# Саммари встречи`).
+Worker поддерживает модели с reasoning (Qwen3.6-MTP и аналоги). Если в ответе есть `reasoning_content`, финальный ответ извлекается из него (ищет последнее вхождение `## Саммари встречи` или `# Саммари встречи`).
 
 #### Ограничения
 
@@ -223,18 +206,35 @@ Worker поддерживает модели с reasoning (Qwen3.6-MTP и ана
 - Саммари обрезается до **2000 символов**
 - Для риск-анализа ответ ожидается в JSON-формате (парсится автоматически, поддержка fenced code blocks ` ```json `)
 
-#### Настройка в docker-compose.yml
+#### docker-compose: резолв LLM-хоста
+
+Если LLM на отдельном хосте, добавьте в `docker-compose.yml`:
 
 ```yaml
 worker:
-  environment:
-    - WORKER_LLM_API_URL=http://faex:8080/v1
-    - WORKER_LLM_MODEL_NAME=qwen3.6-a3b-mtp:35b
   extra_hosts:
     - "faex:192.168.0.104"  # резолв хоста LLM
 ```
 
-Если LLM на отдельном хосте — добавьте его в `extra_hosts` или используйте DNS.
+### Worker
+
+| Переменная              | По умолчанию              | Описание                          |
+|------------------------|---------------------------|-----------------------------------|
+| `WORKER_WHISPER_MODEL` | `large-v3`                | Whisper модель (tiny/base/small/medium/large-v3) |
+| `WORKER_DATA_DIR`      | `/data`                   | Директория для входных аудио      |
+| `WORKER_HEALTH_PORT`   | `8082`                    | Порт /health + metrics            |
+| `LOG_LEVEL`            | `INFO`                    | Уровень логирования               |
+| `MAX_TASK_DURATION`    | `900`                     | Макс. длительность задачи (сек)   |
+| `MAX_RETRIES`          | `3`                       | Макс. ретраев при ошибке          |
+
+### Bot
+
+| Переменная              | По умолчанию       | Описание                          |
+|------------------------|--------------------|-----------------------------------|
+| `LOG_LEVEL`            | `INFO`             | Уровень логирования               |
+| `HEALTH_PORT`          | `8081`             | Порт /health + metrics            |
+| `HELP_TEXT_FILE`       | `/etc/briefer/help.txt` | Путь к файлу help-сообщения |
+| `TZ`                   | `Europe/Moscow`    | Часовой                           |
 
 ## Тесты
 
