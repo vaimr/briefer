@@ -110,10 +110,21 @@ cp .env.example .env
 ### 2. Заполнить `.env`
 
 ```bash
+# Matrix-аутентификация (токен приоритетнее пароля)
 MATRIX_HOMESERVER=https://matrix.example.com
 MATRIX_USER=@briefer_bot:example.com
-MATRIX_PASSWORD=your_bot_password
+MATRIX_ACCESS_TOKEN=your_access_token     # или MATRIX_PASSWORD=...
+# MATRIX_PASSWORD=your_bot_password
+
+# LLM-провайдер (OpenAI-compatible API)
+WORKER_LLM_API_URL=http://faex:8080/v1    # vLLM / Ollama / OpenAI / прокси
+WORKER_LLM_MODEL_NAME=qwen3.6-a3b-mtp:35b
 ```
+
+> **Примеры LLM-бэкендов:**
+> - **vLLM:** `WORKER_LLM_API_URL=http://vllm-host:8000/v1`
+> - **Ollama:** `WORKER_LLM_API_URL=http://localhost:11434/v1` + `WORKER_LLM_MODEL_NAME=qwen3:8b`
+> - **OpenAI:** `WORKER_LLM_API_URL=https://api.openai.com/v1` + `WORKER_LLM_MODEL_NAME=gpt-4o`
 
 ### 3. Запустить
 
