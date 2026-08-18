@@ -155,14 +155,86 @@ docker compose logs -f bot worker
 |------------------------|---------------------------|-----------------------------------|
 | `WORKER_REDIS_HOST`    | `redis`                   | Redis host                        |
 | `WORKER_REDIS_PORT`    | `6379`                    | Redis port                        |
-| `WORKER_LLM_API_URL`   | `http://faex:8080/v1`     | LLM API endpoint                  |
-| `WORKER_LLM_MODEL_NAME`| `qwen3.6-a3b-mtp:35b`     | Имя модели                        |
 | `WORKER_WHISPER_MODEL` | `large-v3`                | Whisper модель (tiny/base/small/medium/large-v3) |
 | `WORKER_DATA_DIR`      | `/data`                   | Директория для входных аудио      |
 | `WORKER_HEALTH_PORT`   | `8082`                    | Порт /health + metrics            |
 | `LOG_LEVEL`            | `INFO`                    | Уровень логирования               |
 | `MAX_TASK_DURATION`    | `900`                     | Макс. длительность задачи (сек)   |
 | `MAX_RETRIES`          | `3`                       | Макс. ретраев при ошибке          |
+
+### Подключение к LLM
+
+Worker общается с LLM через **OpenAI-compatible `/chat/completions`** API.
+
+#### Переменные
+
+| Переменная              | По умолчанию              | Обязательно | Описание                          |
+|------------------------|---------------------------|-------------|-----------------------------------|
+| `WORKER_LLM_API_URL`   | `http://faex:8080/v1`     | ✅ да       | Базовый URL LLM API               |
+| `WORKER_LLM_MODEL_NAME`| `qwen3.6-a3b-mtp:35b`     | ✅ да       | Имя модели для запросов           |
+
+#### Примеры конфигурации
+
+**vLLM (локальный):**
+```yaml
+environment:
+  - WORKER_LLM_API_URL=http://vllm-host:8000/v1
+  - WORKER_LLM_MODEL_NAME=your-model-name
+```
+
+**Ollama (локальный):**
+```yaml
+environment:
+  - WORKER_LLM_API_URL=http://localhost:11434/v1
+  - WORKER_LLM_MODEL_NAME=qwen3:8b
+```
+
+**OpenAI (облако):**
+```yaml
+environment:
+  - WORKER_LLM_API_URL=https://api.openai.com/v1
+  - WORKER_LLM_MODEL_NAME=gpt-4o
+```
+
+**Anthropic (через OpenAI-совместимый прокси):**
+```yaml
+environment:
+  - WORKER_LLM_API_URL=https://your-proxy/v1
+  - WORKER_LLM_MODEL_NAME=claude-sonnet-4-20250514
+```
+
+#### Параметры запроса
+
+| Параметр      | Значение  | Описание                          |
+|--------------|-----------|-----------------------------------|
+| `temperature`| `0.1`     | Для саммари, `0.0` для риск-анализа |
+| `top_p`      | `0.9`     | Nucleus sampling                  |
+| `timeout`    | `60s`     | Таймаут HTTP-запроса              |
+| `max_retries`| `3`       | Повторные попытки при 5xx/timeout |
+| `retry_delay`| `2s`      | Задержка между повторами          |
+
+#### Поддержка reasoning models
+
+Worker поддерживает модели с reasoning (Qwen3.6-MTP и аналоги). Если в ответе есть `reasoning_content`, бот извлекает финальный ответ из него (ищет последнее вхождение `## Саммари встречи` или `# Саммари встречи`).
+
+#### Ограничения
+
+- Транскрипция обрезается до **4000 символов** перед отправкой в LLM
+- Саммари обрезается до **2000 символов**
+- Для риск-анализа ответ ожидается в JSON-формате (парсится автоматически, поддержка fenced code blocks ` ```json `)
+
+#### Настройка в docker-compose.yml
+
+```yaml
+worker:
+  environment:
+    - WORKER_LLM_API_URL=http://faex:8080/v1
+    - WORKER_LLM_MODEL_NAME=qwen3.6-a3b-mtp:35b
+  extra_hosts:
+    - "faex:192.168.0.104"  # резолв хоста LLM
+```
+
+Если LLM на отдельном хосте — добавьте его в `extra_hosts` или используйте DNS.
 
 ## Тесты
 
