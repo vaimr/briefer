@@ -60,13 +60,21 @@ async def create_client(config: BotConfig) -> AsyncClient:
 
     try:
         sync_resp = await client.sync(timeout=5000)
-        _matrix_logger.info("Sync response: batch_id=%s", getattr(sync_resp, 'batch_token', 'N/A'))
+        _matrix_logger.info("Sync response: batch_id=%s, type=%s", getattr(sync_resp, 'batch_token', 'N/A'), type(sync_resp).__name__)
         if hasattr(sync_resp, 'rooms') and sync_resp.rooms:
             for room_type in ("join", "invite", "leave"):
                 room_dict = getattr(sync_resp.rooms, room_type, {})
                 if room_dict:
                     for room_id, room in room_dict.items():
                         _matrix_logger.info("Room: %s [%s] name=%s", room_id, room_type, getattr(room, 'name', 'N/A'))
+                        # Auto-join invite rooms (e.g. DMs)
+                        if room_type == "invite":
+                            join_resp = await client.join(room_id)
+                            _matrix_logger.info("Joined invite room: %s, response=%s", room_id, type(join_resp).__name__)
+                else:
+                    _matrix_logger.info("No rooms in [%s]", room_type)
+        else:
+            _matrix_logger.warning("Sync response has no rooms attribute or rooms is empty/None")
     except Exception as e:
         _matrix_logger.error("Error listing rooms: %s", e)
 

@@ -48,7 +48,9 @@ def _make_mock_matrix(**overrides):
     """Return a mock AsyncClient with async methods."""
     client = MagicMock()
     client.room_send = AsyncMock()
+    client.join = AsyncMock()
     client.add_event_callback = MagicMock()
+    client.add_response_callback = MagicMock()
     client.sync_forever = AsyncMock()
     client.user_id = "@bot:example.com"
     client.download = AsyncMock()
@@ -143,7 +145,8 @@ class TestHandleAudioMessageFullPipeline:
 
         # Verify callback was registered
         assert mock_matrix_client.add_event_callback.called
-        callback = mock_matrix_client.add_event_callback.call_args[0][0]
+        # call_args_list[0] = first call (audio handler), [1] = invite handler
+        callback = mock_matrix_client.add_event_callback.call_args_list[0][0][0]
 
         caplog.clear()
 
@@ -212,7 +215,7 @@ class TestHandleNonAudioIgnored:
                 pass
 
         # Verify callback was registered
-        callback = mock_matrix_client.add_event_callback.call_args[0][0]
+        callback = mock_matrix_client.add_event_callback.call_args_list[0][0][0]
 
         caplog.clear()
 
@@ -270,7 +273,7 @@ class TestHandleInvalidAudioErrorStatus:
                 pass
 
         # Verify callback was registered
-        callback = mock_matrix_client.add_event_callback.call_args[0][0]
+        callback = mock_matrix_client.add_event_callback.call_args_list[0][0][0]
 
         # Simulate callback with audio event that raises
         mock_event.message_id = "msg_003"

@@ -1,0 +1,249 @@
+# Briefer — Matrix Bot для расшифровки и саммари аудио
+
+AI-бот для Matrix, который принимает аудио сообщения (голосовые, аудиофайлы), транскрибирует их с помощью OpenAI Whisper, генерирует саммари через LLM (OpenAI-compatible API), и возвращает результаты в виде Markdown + PDF файлов прямо в комнату.
+
+## Архитектура
+
+```
+┌──────────┐     аудио       ┌───────┐     очередь      ┌────────┐
+│  Matrix  │ ──────────────► │  Bot  │ ──────────────► │        │
+│  Room    │   (audio/file)  │ (async)│   Redis RPUSH   │        │
+└──────────┘                 └───────┘                  │        │
+         ▲                   │  ▲                      │  Redis │
+         │                   │  │                      │        │
+         │  результаты       │  │ blpop                │  Queue │
+         │  (MD+PDF)         │  │                      │        │
+         │                   ▼  │                      └────────┘
+         │              ┌───────┐
+         │              │Worker │
+         │              │(sync) │
+         │              └───────┘
+         │                 │
+         │       ┌─────────┴─────────┐
+         │       ▼                   ▼
+         │  ┌─────────┐      ┌──────────┐
+         │  │ Whisper │      │   LLM    │
+         │  │ (local) │      │ (API)    │
+         │  └─────────┘      └──────────┘
+         │       │                   │
+         │       └─────────┬─────────┘
+         │                 ▼
+         │         MD + PDF файлы
+         │                 │
+         └─────────────────┘
+              Redis PUB/SUB
+              (task_results)
+```
+
+### Компоненты
+
+| Компонент    | Описание                                                                 | Порт  |
+|-------------|--------------------------------------------------------------------------|-------|
+| **Bot**     | Matrix-клиент (nio). Слушает аудио/файлы, скачивает, пушит в Redis, получает результаты через pub/sub | 8081  |
+| **Worker**  | Pull-воркер из Redis. Транскрибация → LLM саммари + риск-анализ → PDF → pub/sub результатов | 8082  |
+| **Redis**   | Очередь (`transcription_queue`) + pub/sub каналы (`task_results`, `task_errors`, `task_cleanup`) | 6379  |
+| **LLM API** | OpenAI-compatible endpoint (например, vLLM/Faex) для саммари и риск-анализа | —     |
+
+### Pipeline обработки
+
+```
+1. Пользователь → отправляет аудио в Matrix
+2. Bot → скачивает файл, пушит в Redis: "room_id|audio_path|filename|event_id"
+3. Worker → blpop из очереди
+4. Worker → Whisper транскрибация → текст + длительность
+5. Worker → параллельно: LLM саммари + LLM риск-анализ
+6. Worker → генерация PDF (transcript + summary + risk_alert при необходимости)
+7. Worker → Redis publish "task_results" с путями к файлам
+8. Bot → pub/sub → скачивает файлы → загружает в Matrix как m.file
+9. Bot → Redis publish "task_cleanup" → Worker удаляет временные файлы
+```
+
+### Каналы Redis
+
+| Канал               | Направление    | Описание                          |
+|---------------------|----------------|-----------------------------------|
+| `transcription_queue` | Bot → Worker   | LPUSH от бота, BLPOP от воркера |
+| `task_results`      | Worker → Bot   | Pub/Sub с JSON результатами      |
+| `task_errors`       | Worker → Bot   | Pub/Sub с ошибками               |
+| `task_cleanup`      | Bot → Worker   | Pub/Sub с task_id для очистки    |
+
+### Формат очереди
+
+```
+room_id|/data/input/<hash>.<ext>|<original_filename>|<event_id>
+```
+
+### Формат результата (task_results)
+
+```json
+{
+  "task_id": "abc123...",
+  "room_id": "!xyz:server",
+  "original_filename": "meeting.ogg",
+  "event_id": "$abc...",
+  "transcript_md": "/tmp/results/abc/transcript.md",
+  "transcript_pdf": "/tmp/results/abc/transcript.pdf",
+  "summary_md": "/tmp/results/abc/summary.md",
+  "summary_pdf": "/tmp/results/abc/summary.pdf",
+  "risk_files": ["/tmp/results/abc/risk_alert.pdf"],
+  "timestamp": "2025-01-15T10:30:00"
+}
+```
+
+## Быстрое развертывание
+
+### Требования
+
+- Docker + Docker Compose
+- Matrix homeserver с правами на создание бот-аккаунта
+- LLM API (OpenAI-compatible, например vLLM)
+- GPU (опционально, для Whisper large-v3)
+
+### 1. Клонировать и настроить
+
+```bash
+git clone <repo>
+cd briefer
+cp .env.example .env
+```
+
+### 2. Заполнить `.env`
+
+```bash
+MATRIX_HOMESERVER=https://matrix.example.com
+MATRIX_USER=@briefer_bot:example.com
+MATRIX_PASSWORD=your_bot_password
+```
+
+### 3. Запустить
+
+```bash
+docker compose up -d --build
+```
+
+### 4. Проверить
+
+```bash
+# Health endpoints
+curl http://localhost:8081/health   # bot
+curl http://localhost:8082/health   # worker
+
+# Logs
+docker compose logs -f bot worker
+```
+
+## Настройки
+
+### Bot (`.env`)
+
+| Переменная              | По умолчанию       | Описание                          |
+|------------------------|--------------------|-----------------------------------|
+| `MATRIX_HOMESERVER`    | *(required)*       | URL Matrix homeserver             |
+| `MATRIX_USER`          | *(required)*       | Bot аккаунт (с @)                 |
+| `MATRIX_PASSWORD`      | *(required)*       | Пароль бота                       |
+| `MATRIX_ACCESS_TOKEN`  |                    | Токен вместо пароля               |
+| `REDIS_HOST`           | `redis`            | Redis host                        |
+| `REDIS_PORT`           | `6379`             | Redis port                        |
+| `LOG_LEVEL`            | `INFO`             | Уровень логирования               |
+| `HEALTH_PORT`          | `8081`             | Порт /health + metrics            |
+| `HELP_TEXT_FILE`       | `/etc/briefer/help.txt` | Путь к файлу help-сообщения |
+| `TZ`                   | `Europe/Moscow`    | Часовой                           |
+
+### Worker (`.env` / docker-compose.yml)
+
+| Переменная              | По умолчанию              | Описание                          |
+|------------------------|---------------------------|-----------------------------------|
+| `WORKER_REDIS_HOST`    | `redis`                   | Redis host                        |
+| `WORKER_REDIS_PORT`    | `6379`                    | Redis port                        |
+| `WORKER_LLM_API_URL`   | `http://faex:8080/v1`     | LLM API endpoint                  |
+| `WORKER_LLM_MODEL_NAME`| `qwen3.6-a3b-mtp:35b`     | Имя модели                        |
+| `WORKER_WHISPER_MODEL` | `large-v3`                | Whisper модель (tiny/base/small/medium/large-v3) |
+| `WORKER_DATA_DIR`      | `/data`                   | Директория для входных аудио      |
+| `WORKER_HEALTH_PORT`   | `8082`                    | Порт /health + metrics            |
+| `LOG_LEVEL`            | `INFO`                    | Уровень логирования               |
+| `MAX_TASK_DURATION`    | `900`                     | Макс. длительность задачи (сек)   |
+| `MAX_RETRIES`          | `3`                       | Макс. ретраев при ошибке          |
+
+## Тесты
+
+```bash
+# Все тесты
+make test
+
+# Без покрытия
+make test-no-cov
+
+# Линтинг
+make lint
+
+# Форматирование
+make format
+```
+
+## Мониторинг
+
+### Prometheus Metrics
+
+| Metric                        | Тип      | Описание                          |
+|-------------------------------|----------|-----------------------------------|
+| `bot_messages_received`       | Counter  | Входящие сообщения (audio/other)  |
+| `bot_messages_processed`      | Counter  | Обработанные сообщения            |
+| `bot_queue_depth`             | Gauge    | Глубина очереди                   |
+| `worker_tasks_processed`      | Counter  | Обработанные задачи (success/error)|
+| `worker_processing_duration`  | Histogram| Длительность обработки            |
+| `worker_whisper_loaded`       | Gauge    | 1 = Whisper загружен              |
+
+### Health Checks
+
+- Bot: `GET http://<bot-host>:8081/health`
+- Worker: `GET http://<worker-host>:8082/health`
+
+## Структура проекта
+
+```
+briefer/
+├── bot/                          # Matrix bot
+│   ├── __main__.py               # Entry point, sync loop
+│   ├── config.py                 # BotConfig (pydantic-settings)
+│   ├── matrix_client.py          # Matrix client wrapper
+│   ├── result_listener.py        # Pub/sub results consumer
+│   ├── audio_downloader.py       # Audio download helpers
+│   ├── health.py                 # HTTP health server
+│   ├── metrics.py                # Prometheus metrics (bot)
+│   ├── notifications.py          # Error notifications
+│   ├── pdf_uploader.py           # PDF upload to Matrix
+│   └── Dockerfile
+├── worker/                       # Processing worker
+│   ├── __main__.py               # Entry point, queue loop
+│   ├── config.py                 # WorkerConfig (pydantic-settings)
+│   ├── whisper_engine.py         # OpenAI Whisper transcription
+│   ├── llm_engine.py             # LLM API client
+│   ├── llm_client.py             # Summarize + risk check
+│   ├── pipeline.py               # Processing pipeline
+│   ├── pdf_generator.py          # Markdown → PDF
+│   ├── chunking.py               # Transcript chunking
+│   ├── retry.py                  # Retry logic
+│   ├── dlq.py                    # Dead letter queue
+│   ├── task_tracker.py           # Task lifecycle tracking
+│   ├── graceful_shutdown.py      # Graceful shutdown
+│   ├── audio_converter.py        # Audio format conversion
+│   ├── audio.py                  # Audio utilities
+│   ├── health.py                 # HTTP health server
+│   ├── metrics.py                # Prometheus metrics (worker)
+│   └── Dockerfile
+├── tests/                        # Test suite
+│   ├── unit/                     # Unit tests (~50+ файлов)
+│   └── integration/              # Integration tests
+├── docker-compose.yml            # Orchestration
+├── Makefile                      # Dev commands
+├── .env.example                  # Environment template
+└── docs/                         # Design docs
+```
+
+## Лимиты и ограничения
+
+- Аудио файлы скачиваются в `/data/input/` (volume mount)
+- Результаты пишутся в `/tmp/results/<task_id>/` (volume mount `results`)
+- Worker удаляет результаты после публикации cleanup в Redis
+- Whisper модель кэшируется в `/root/.cache/huggingface` (volume `whisper_cache`)
+- Redis данные в `redis_data` volume

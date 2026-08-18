@@ -12,7 +12,7 @@ from typing import Optional
 
 import redis
 
-from nio import RoomMessageAudio, RoomMessageFile, RoomMessageText
+from nio import InviteMemberEvent, RoomMessageAudio, RoomMessageFile, RoomMessageText, SyncError
 
 from .config import BotConfig
 from .health import start_http_server
@@ -112,12 +112,12 @@ async def _deliver_result(client, pubsub, data) -> None:
                     "rel_type": "m.reference",
                     "in_reply_to": {"event_id": event_id},
                 }
-            await client.room_send(
+            resp = await client.room_send(
                 room_id,
                 "m.room.message",
                 msg,
             )
-            logger.info("Sent %s to %s: %s", name, room_id, mxc_uri)
+            logger.info("Sent %s to %s: %s (resp=%s)", name, room_id, mxc_uri, type(resp).__name__)
 
         for risk_path in risk_files:
             if not os.path.exists(risk_path):
@@ -290,6 +290,308 @@ async def main():
     client.add_event_callback(callback, (RoomMessageAudio, RoomMessageFile, RoomMessageText))
     logger.info("Event callback registered: RoomMessageAudio, RoomMessageFile, RoomMessageText")
 
+    # ------------------------------------------------------------------
+    # Response callback: log sync state for diagnostics
+    # ------------------------------------------------------------------
+    _sync_count = 0
+
+    async def sync_state_callback(response):
+        nonlocal _sync_count
+        if hasattr(response, "next_batch"):
+            _sync_count += 1
+            rooms_join = len(getattr(response, "rooms", None).join or {})
+            rooms_invite = len(getattr(response, "rooms", None).invite or {})
+            logger.info(
+                "Sync #%d: next_batch=%s, rooms.join=%d, rooms.invite=%d",
+                _sync_count,
+                getattr(response, "next_batch", "N/A")[:32] if getattr(response, "next_batch", None) else "N/A",
+                rooms_join,
+                rooms_invite,
+            )
+            if rooms_join == 0 and _sync_count > 2:
+                known_rooms = list(client.rooms.keys()) if hasattr(client, "rooms") else []
+                logger.warning(
+                    "Sync returned 0 joined rooms after %d syncs — bot may have stale sync state or invalid token. Known rooms: %s",
+                    _sync_count,
+                    known_rooms,
+                )
+
+    client.add_response_callback(sync_state_callback)
+    logger.info("Sync state callback registered")
+
+    # ------------------------------------------------------------------
+    # Response callback: log sync state for diagnostics
+    # ------------------------------------------------------------------
+    _sync_count = 0
+
+    async def sync_state_callback(response):
+        nonlocal _sync_count
+        if hasattr(response, "next_batch"):
+            _sync_count += 1
+            rooms_join = len(getattr(response, "rooms", None).join or {})
+            rooms_invite = len(getattr(response, "rooms", None).invite or {})
+            logger.info(
+                "Sync #%d: next_batch=%s, rooms.join=%d, rooms.invite=%d",
+                _sync_count,
+                getattr(response, "next_batch", "N/A")[:32] if getattr(response, "next_batch", None) else "N/A",
+                rooms_join,
+                rooms_invite,
+            )
+            if rooms_join == 0 and _sync_count > 2:
+                known_rooms = list(client.rooms.keys()) if hasattr(client, "rooms") else []
+                logger.warning(
+                    "Sync returned 0 joined rooms after %d syncs — bot may have stale sync state or invalid token. Known rooms: %s",
+                    _sync_count,
+                    known_rooms,
+                )
+
+    client.add_response_callback(sync_state_callback)
+    logger.info("Sync state callback registered")
+
+    # ------------------------------------------------------------------
+    # Response callback: log sync state for diagnostics
+    # ------------------------------------------------------------------
+    _sync_count = 0
+
+    async def sync_state_callback(response):
+        nonlocal _sync_count
+        if hasattr(response, "next_batch"):
+            _sync_count += 1
+            rooms_join = len(getattr(response, "rooms", None).join or {})
+            rooms_invite = len(getattr(response, "rooms", None).invite or {})
+            logger.info(
+                "Sync #%d: next_batch=%s, rooms.join=%d, rooms.invite=%d",
+                _sync_count,
+                getattr(response, "next_batch", "N/A")[:32] if getattr(response, "next_batch", None) else "N/A",
+                rooms_join,
+                rooms_invite,
+            )
+            if rooms_join == 0 and _sync_count > 2:
+                known_rooms = list(client.rooms.keys()) if hasattr(client, "rooms") else []
+                logger.warning(
+                    "Sync returned 0 joined rooms after %d syncs — bot may have stale sync state or invalid token. Known rooms: %s",
+                    _sync_count,
+                    known_rooms,
+                )
+
+    client.add_response_callback(sync_state_callback)
+    logger.info("Sync state callback registered")
+
+    # ------------------------------------------------------------------
+    # Response callback: log sync state for diagnostics
+    # ------------------------------------------------------------------
+    _sync_count = 0
+
+    async def sync_state_callback(response):
+        nonlocal _sync_count
+        if hasattr(response, "next_batch"):
+            _sync_count += 1
+            rooms_join = len(getattr(response, "rooms", None).join or {})
+            rooms_invite = len(getattr(response, "rooms", None).invite or {})
+            logger.info(
+                "Sync #%d: next_batch=%s, rooms.join=%d, rooms.invite=%d",
+                _sync_count,
+                getattr(response, "next_batch", "N/A")[:32] if getattr(response, "next_batch", None) else "N/A",
+                rooms_join,
+                rooms_invite,
+            )
+            if rooms_join == 0 and _sync_count > 2:
+                known_rooms = list(client.rooms.keys()) if hasattr(client, "rooms") else []
+                logger.warning(
+                    "Sync returned 0 joined rooms after %d syncs — bot may have stale sync state or invalid token. Known rooms: %s",
+                    _sync_count,
+                    known_rooms,
+                )
+
+    client.add_response_callback(sync_state_callback)
+    logger.info("Sync state callback registered")
+
+    # ------------------------------------------------------------------
+    # Response callback: log sync state for diagnostics
+    # ------------------------------------------------------------------
+    _sync_count = 0
+
+    async def sync_state_callback(response):
+        nonlocal _sync_count
+        if hasattr(response, "next_batch"):
+            _sync_count += 1
+            rooms_join = len(getattr(response, "rooms", None).join or {})
+            rooms_invite = len(getattr(response, "rooms", None).invite or {})
+            logger.info(
+                "Sync #%d: next_batch=%s, rooms.join=%d, rooms.invite=%d",
+                _sync_count,
+                getattr(response, "next_batch", "N/A")[:32] if getattr(response, "next_batch", None) else "N/A",
+                rooms_join,
+                rooms_invite,
+            )
+            if rooms_join == 0 and _sync_count > 2:
+                known_rooms = list(client.rooms.keys()) if hasattr(client, "rooms") else []
+                logger.warning(
+                    "Sync returned 0 joined rooms after %d syncs — bot may have stale sync state or invalid token. Known rooms: %s",
+                    _sync_count,
+                    known_rooms,
+                )
+
+    client.add_response_callback(sync_state_callback)
+    logger.info("Sync state callback registered")
+
+    # ------------------------------------------------------------------
+    # Response callback: log sync state for diagnostics
+    # ------------------------------------------------------------------
+    _sync_count = 0
+
+    async def sync_state_callback(response):
+        nonlocal _sync_count
+        if hasattr(response, "next_batch"):
+            _sync_count += 1
+            rooms_join = len(getattr(response, "rooms", None).join or {})
+            rooms_invite = len(getattr(response, "rooms", None).invite or {})
+            logger.info(
+                "Sync #%d: next_batch=%s, rooms.join=%d, rooms.invite=%d",
+                _sync_count,
+                getattr(response, "next_batch", "N/A")[:32] if getattr(response, "next_batch", None) else "N/A",
+                rooms_join,
+                rooms_invite,
+            )
+            if rooms_join == 0 and _sync_count > 2:
+                known_rooms = list(client.rooms.keys()) if hasattr(client, "rooms") else []
+                logger.warning(
+                    "Sync returned 0 joined rooms after %d syncs — bot may have stale sync state or invalid token. Known rooms: %s",
+                    _sync_count,
+                    known_rooms,
+                )
+
+    client.add_response_callback(sync_state_callback)
+    logger.info("Sync state callback registered")
+
+    # ------------------------------------------------------------------
+    # Response callback: log sync state for diagnostics
+    # ------------------------------------------------------------------
+    _sync_count = 0
+
+    async def sync_state_callback(response):
+        nonlocal _sync_count
+        if hasattr(response, "next_batch"):
+            _sync_count += 1
+            rooms_join = len(getattr(response, "rooms", None).join or {})
+            rooms_invite = len(getattr(response, "rooms", None).invite or {})
+            logger.info(
+                "Sync #%d: next_batch=%s, rooms.join=%d, rooms.invite=%d",
+                _sync_count,
+                getattr(response, "next_batch", "N/A")[:32] if getattr(response, "next_batch", None) else "N/A",
+                rooms_join,
+                rooms_invite,
+            )
+            if rooms_join == 0 and _sync_count > 2:
+                known_rooms = list(client.rooms.keys()) if hasattr(client, "rooms") else []
+                logger.warning(
+                    "Sync returned 0 joined rooms after %d syncs — bot may have stale sync state or invalid token. Known rooms: %s",
+                    _sync_count,
+                    known_rooms,
+                )
+
+    client.add_response_callback(sync_state_callback)
+    logger.info("Sync state callback registered")
+
+    # ------------------------------------------------------------------
+    # Response callback: log sync state for diagnostics
+    # ------------------------------------------------------------------
+    _sync_count = 0
+
+    async def sync_state_callback(response):
+        nonlocal _sync_count
+        if hasattr(response, "next_batch"):
+            _sync_count += 1
+            rooms_join = len(getattr(response, "rooms", None).join or {})
+            rooms_invite = len(getattr(response, "rooms", None).invite or {})
+            logger.info(
+                "Sync #%d: next_batch=%s, rooms.join=%d, rooms.invite=%d",
+                _sync_count,
+                getattr(response, "next_batch", "N/A")[:32] if getattr(response, "next_batch", None) else "N/A",
+                rooms_join,
+                rooms_invite,
+            )
+            if rooms_join == 0 and _sync_count > 2:
+                known_rooms = list(client.rooms.keys()) if hasattr(client, "rooms") else []
+                logger.warning(
+                    "Sync returned 0 joined rooms after %d syncs — bot may have stale sync state or invalid token. Known rooms: %s",
+                    _sync_count,
+                    known_rooms,
+                )
+
+    client.add_response_callback(sync_state_callback)
+    logger.info("Sync state callback registered")
+
+    # Auto-join DM rooms
+    async def invite_handler(room, event):
+        room_id = room.room_id
+        logger.info("Received invite to room: %s", room_id)
+        await client.join(room_id)
+        logger.info("Joined room: %s", room_id)
+
+    # ------------------------------------------------------------------
+    # Response callback: log sync state for diagnostics
+    # ------------------------------------------------------------------
+    _sync_count = 0
+
+    async def sync_state_callback(response):
+        nonlocal _sync_count
+        if hasattr(response, "next_batch"):
+            _sync_count += 1
+            rooms_join = len(getattr(response, "rooms", None).join or {})
+            rooms_invite = len(getattr(response, "rooms", None).invite or {})
+            logger.info(
+                "Sync #%d: next_batch=%s, rooms.join=%d, rooms.invite=%d",
+                _sync_count,
+                getattr(response, "next_batch", "N/A")[:32] if getattr(response, "next_batch", None) else "N/A",
+                rooms_join,
+                rooms_invite,
+            )
+            if rooms_join == 0 and _sync_count > 2:
+                known_rooms = list(client.rooms.keys()) if hasattr(client, "rooms") else []
+                logger.warning(
+                    "Sync returned 0 joined rooms after %d syncs — bot may have stale sync state or invalid token. Known rooms: %s",
+                    _sync_count,
+                    known_rooms,
+                )
+
+    client.add_response_callback(sync_state_callback)
+    logger.info("Sync state callback registered")
+
+    client.add_event_callback(invite_handler, (InviteMemberEvent,))
+    logger.info("Invite callback registered for auto-join DM rooms")
+
+    sync_error_count = 0
+
+    async def response_callback(response):
+        nonlocal sync_error_count
+        if isinstance(response, SyncError):
+            sync_error_count += 1
+            errcode = getattr(response, "status_code", None) or "N/A"
+            error_msg = getattr(response, "message", str(response)) or "unknown"
+            retry_after = getattr(response, "retry_after_ms", None)
+            soft_logout = getattr(response, "soft_logout", False)
+            logger.error(
+                "Matrix sync returned SyncError (count=%d): errcode=%s, error=%s, "
+                "retry_after_ms=%s, soft_logout=%s",
+                sync_error_count,
+                errcode,
+                error_msg,
+                retry_after,
+                soft_logout,
+            )
+            transport = getattr(response, "transport_response", None)
+            if transport is not None:
+                logger.error(
+                    "Raw transport: status=%s, url=%s, body=%r",
+                    getattr(transport, "status", "N/A"),
+                    getattr(transport, "url", "N/A"),
+                    getattr(transport, "_body", getattr(transport, "body", "N/A")),
+                )
+
+    client.add_response_callback(response_callback)
+    logger.info("SyncError response callback registered")
+
     # Подписка на результаты
     pubsub = redis_client.pubsub()
     pubsub.subscribe("task_results")
@@ -320,10 +622,26 @@ async def main():
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, _signal_wrapper, sig)
 
-    # Основной цикл
+    # Основной цикл: sync_forever with SyncError retry
+    sync_attempt = 0
+
     try:
-        logger.info("Starting sync_forever...")
-        await client.sync_forever(timeout=30000)
+        logger.info("Starting sync loop...")
+        while not shutdown_event.is_set():
+            sync_attempt += 1
+            try:
+                logger.info("Sync loop iteration #%d", sync_attempt)
+                await client.sync_forever(timeout=30000)
+                # sync_forever only exits on CancelledError or exception
+                break
+            except asyncio.CancelledError:
+                logger.info("Sync loop cancelled")
+                break
+            except Exception as exc:
+                logger.error("sync_forever exception (attempt #%d): %s", sync_attempt, exc)
+                if shutdown_event.is_set():
+                    break
+                await asyncio.sleep(5)
     except Exception as exc:
         logger.error("sync_forever error: %s", exc)
     finally:
